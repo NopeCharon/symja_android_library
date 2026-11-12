@@ -33744,9 +33744,9 @@ public class LowercaseTestCase extends ExprEvaluatorTestCase {
 
   @Test
   public void testPossibleZeroQ() {
-    // same as in WMA but should be True
+    // zero at every sample point with 40 digits; a deliberate difference: WMA answers False
     check("PossibleZeroQ(Gamma(x+1)-x*Gamma(x))", //
-        "False");
+        "True");
 
     check("PossibleZeroQ(Gamma(x+1)-x*Gamma(x)+1)", //
         "False");

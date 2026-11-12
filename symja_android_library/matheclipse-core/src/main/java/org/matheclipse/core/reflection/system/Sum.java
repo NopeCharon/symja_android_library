@@ -657,6 +657,11 @@ public class Sum extends ListFunctions.Table implements SumRules {
           if (preevaledSum.arg1().isFree(variable) && variable.isVariable()) {
             return indefiniteSum(preevaledSum, variable);
           }
+          if (lastArg.isList() && variable.isVariable() && preevaledSum.isAST2()) {
+            // Sum(f(n), {n}) with a symbol n is the indefinite sum Sum(f(n), n)
+            IExpr indefinite = engine.evaluate(F.Sum(preevaledSum.arg1(), variable));
+            return indefinite.isFreeAST(S.Sum) ? indefinite : F.NIL;
+          }
         }
 
         // the variables of the outer iterators are symbolic while the innermost sum is reduced on

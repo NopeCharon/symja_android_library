@@ -620,6 +620,16 @@ public class Integrate extends AbstractFunctionOptionEvaluator {
       }
       engine.setNumericMode(false);
 
+      if (argSize == 2) {
+        // The limits are evaluated before the integrand is looked at: an integral which stays
+        // unevaluated shows them evaluated, as Integrate(g(k), {k, 0*a+y, b}) its limit y, and
+        // equal limits are seen as equal.
+        IExpr limits = engine.evaluateNIL(holdallAST.arg2());
+        if (limits.isList3()) {
+          return engine.evaluate(holdallAST.setAtCopy(2, limits));
+        }
+      }
+
       final IExpr arg1Holdall = holdallAST.arg1();
       if (argSize == 2 && hasInterpolatingFunction(arg1Holdall, engine)) {
         // an interpolating function stands for numeric data, its definite integral is numeric
@@ -671,6 +681,11 @@ public class Integrate extends AbstractFunctionOptionEvaluator {
       if (arg2.isList()) {
         IAST xList = (IAST) arg2;
         if (xList.isList3()) {
+          if (xList.arg2().equals(xList.arg3()) && !xList.arg2().isDirectedInfinity()
+              && !arg1.isDirectedInfinity() && !arg1.isIndeterminate()) {
+            // an interval of no width, whatever the integrand is
+            return F.C0;
+          }
           // Integrate(Derivative(n)[f][x], {x,a,b}) for an unknown function f stays unevaluated,
           // the fundamental theorem of calculus value f(b)-f(a) needs f' to be integrable on [a,b],
           // which cannot be assumed for an arbitrary f. (The indefinite

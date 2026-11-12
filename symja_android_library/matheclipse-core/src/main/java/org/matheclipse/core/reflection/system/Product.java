@@ -117,6 +117,10 @@ public class Product extends ListFunctions.Table implements ProductRules {
           if (arg.isPower() && arg.equalsAt(1, variable)) {
             return productPowerFormula(arg, variable, F.C1, variable.dec());
           }
+          if (arg.equals(variable)) {
+            // the indefinite product of n: n!/(n-1)! == n
+            return F.Factorial(F.Plus(F.CN1, variable));
+          }
         }
       }
 
