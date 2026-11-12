@@ -2049,6 +2049,115 @@ public class GeometricTestCase extends ExprEvaluatorTestCase {
   }
 
   @Test
+  public void testRegionNearestInfiniteFlats() {
+    // a line through two points and a line through a point in a direction
+    check("RegionNearest(InfiniteLine({{1,1},{4,5}}), {2,7})", //
+        "{106/25,133/25}");
+    check("RegionNearest(InfiniteLine({2,0,1},{1,2,2}), {0,3,0})", //
+        "{20/9,4/9,13/9}");
+    // a plane through three points and a plane through a point spanned by two directions
+    check("RegionNearest(InfinitePlane({{2,0,0},{0,4,0},{0,0,4}}), {0,0,0})", //
+        "{4/3,2/3,2/3}");
+    check("RegionNearest(InfinitePlane({0,0,0,1},{{1,0,0,0},{0,1,1,0}}), {3,1,5,2})", //
+        "{3,3,3,1}");
+    // a machine number gives a machine result
+    check("RegionNearest(InfiniteLine({{0,0},{2,1}}), {1.5,0})", //
+        "{1.2,0.6}");
+    // coincident points, a zero direction and parallel directions span no line or plane
+    check("RegionNearest(InfiniteLine({{1,1},{1,1}}), {2,3})", //
+        "RegionNearest(InfiniteLine({{1,1},{1,1}}),{2,3})");
+    check("RegionNearest(InfiniteLine({1,1},{0,0}), {2,3})", //
+        "RegionNearest(InfiniteLine({1,1},{0,0}),{2,3})");
+    check("RegionNearest(InfinitePlane({{0,0,0},{1,2,0},{2,4,0}}), {1,1,1})", //
+        "RegionNearest(InfinitePlane({{0,0,0},{1,2,0},{2,4,0}}),{1,1,1})");
+    check("RegionNearest(InfinitePlane({0,0,0},{{1,1,0},{-2,-2,0}}), {1,1,1})", //
+        "RegionNearest(InfinitePlane({0,0,0},{{1,1,0},{-2,-2,0}}),{1,1,1})");
+    // a list of points gives the list of nearest points
+    check("RegionNearest(InfiniteLine({{0,0},{2,1}}), {{5,0},{0,5}})", //
+        "{{4,2},{2,1}}");
+    // symbolic coordinates
+    check("RegionNearest(InfiniteLine({0,c},{0,1}), {u,v})", //
+        "{0,v}");
+    // a plane of the plane is all of it
+    check("RegionNearest(InfinitePlane({{1,1},{2,1},{1,3}}), {4,-7})", //
+        "{4,-7}");
+  }
+
+  @Test
+  public void testRegionDistanceInfiniteFlats() {
+    check("RegionDistance(InfiniteLine({{1,1},{4,5}}), {2,7})", //
+        "14/5");
+    check("RegionDistance(InfinitePlane({{2,0,0},{0,4,0},{0,0,4}}), {0,0,0})", //
+        "2*Sqrt(2/3)");
+    check("RegionDistance(InfinitePlane({0,0,0,1},{{1,0,0,0},{0,1,1,0}}), {3,1,5,2})", //
+        "3");
+    check("RegionDistance(InfiniteLine({0,0,0},{0,0,1.0}), {3,4,1})", //
+        "5.0");
+    check("RegionDistance(InfiniteLine({{0,0},{2,1}}), {{5,0},{0,5}})", //
+        "{Sqrt(5),2*Sqrt(5)}");
+    // the distance to a plane spanned by parallel directions is the distance to their line
+    check("RegionDistance(InfinitePlane({0,0,0},{{0,1,1},{0,3,3}}), {2,1,0})", //
+        "3/Sqrt(2)");
+    // a line in the zero direction has no distance to measure
+    check("RegionDistance(InfiniteLine({1,4},{0,0}), {3,3})", //
+        "Indeterminate");
+    check("RegionDistance(InfinitePlane({{1,1,1},{1,1,1},{1,1,1}}), {0,2,0})", //
+        "Indeterminate");
+  }
+
+  @Test
+  public void testRegionIntersectionInfiniteFlats() {
+    // a segment through a plane, and one which stops short of it
+    check("RegionIntersection(InfinitePlane({0,0,0},{{1,0,0},{0,1,0}}), Line({{1,2,-1},{3,4,3}}))", //
+        "Point({{3/2,5/2,0}})");
+    check("RegionIntersection(InfinitePlane({0,0,0},{{1,0,0},{0,1,0}}), Line({{0,0,1},{1,1,2}}))", //
+        "EmptyRegion(3)");
+    check("RegionIntersection(InfiniteLine({1,0},{0,1}), Line({{0,0},{3,3}}))", //
+        "Point({{1,1}})");
+    // a polyline crossing the line at one of its corners meets it there once
+    check("RegionIntersection(InfiniteLine({{0,2},{1,2}}), Line({{0,0},{1,2},{2,4}}))", //
+        "Point({{1,2}})");
+    // a machine polyline with a corner on the line meets it there once
+    check("RegionIntersection(InfiniteLine({0.1,0.2},{0.3,0.7}), Line({{-1.4,2.5},{0.271,0.599},{4.4,-1.1}}))", //
+        "Point({{0.271,0.599}})");
+    // a polyline which crosses the line twice at one point, in segments which aren't adjacent
+    check("RegionIntersection(InfiniteLine({{0,0},{1,0}}), Line({{0,-1},{0,1},{1,1},{-1,-1}}))", //
+        "Point({{0,0},{0,0}})");
+    // a machine number only spreads into the coordinates it enters
+    check("RegionIntersection(Line({{0.,0},{4,2}}), InfiniteLine({{0,1},{1,1}}))", //
+        "Point({{2.0,1}})");
+    check("RegionIntersection(Line({{0.,0},{4,2.}}), InfiniteLine({{0,1},{1,1}}))", //
+        "Point({{2.0,1.0}})");
+    // a segment or a line lying in the other region is itself the intersection
+    check("RegionIntersection(InfiniteLine({{0,0},{1,1}}), Line({{2,2},{5,5}}))", //
+        "Line({{2,2},{5,5}})");
+    // the segments of a polyline lying on the line, if its other crossings lie on them
+    check("RegionIntersection(InfiniteLine({{0,1},{1,1}}), Line({{0,0},{1,1},{4,1},{5,3},{6,1},{7,1}}))", //
+        "Line({{{1,1},{4,1}},{{6,1},{7,1}}})");
+    check("RegionIntersection(InfiniteLine({{0,1},{1,1}}), Line({{1,1},{4,1},{5,3},{2,-1}}))", //
+        "Line({{{1,1},{4,1}}})");
+    check("RegionIntersection(InfinitePlane({0,0,2},{{1,0,0},{0,1,0}}), InfiniteLine({0,0,2},{3,4,0}))", //
+        "InfiniteLine({0,0,2},{3,4,0})");
+    // two lines, or a line and a plane, cross in a single point
+    check("RegionIntersection(InfiniteLine({{0,0},{1,2}}), InfiniteLine({{3,0},{3,1}}))", //
+        "Point({3,6})");
+    check("RegionIntersection(InfinitePlane({0,0,0},{{1,0,0},{0,1,0}}), InfiniteLine({1,1,1},{1,0,-1}))", //
+        "Point({2,1,0})");
+    // two planes of space meet in a line through its point nearest to the origin
+    check("RegionIntersection(InfinitePlane({0,0,3},{{1,0,0},{0,1,0}}), InfinitePlane({2,0,0},{{0,1,0},{0,0,1}}))", //
+        "InfiniteLine({2,0,3},{0,1,0})");
+    check("RegionIntersection(InfinitePlane({0,0,3},{{1,0,0},{0,1,0}}), InfinitePlane({0,0,1},{{1,1,0},{0,1,0}}))", //
+        "EmptyRegion(3)");
+    // parallel lines, skew lines and a line parallel to a plane don't meet
+    check("RegionIntersection(InfiniteLine({{0,0},{1,2}}), InfiniteLine({{1,0},{2,2}}))", //
+        "EmptyRegion(2)");
+    check("RegionIntersection(InfiniteLine({{0,0,0},{1,0,0}}), InfiniteLine({{0,1,1},{0,2,1}}))", //
+        "EmptyRegion(3)");
+    check("RegionIntersection(InfinitePlane({0,0,1},{{1,0,0},{0,1,0}}), InfiniteLine({0,0,0},{1,1,0}))", //
+        "EmptyRegion(3)");
+  }
+
+  @Test
   public void testRegionIntersection() {
     // one region is itself, and a region intersected with itself is itself
     check("RegionIntersection(Disk({0,0},1))", //

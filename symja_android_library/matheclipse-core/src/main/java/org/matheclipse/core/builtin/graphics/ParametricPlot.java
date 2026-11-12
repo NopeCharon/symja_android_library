@@ -98,6 +98,9 @@ public class ParametricPlot extends Plot {
         }
 
         GraphicsOptions listPlotOptions = graphicsOptions.copy();
+        // opaque curves; the face opacity is the one a filled parametric region would get
+        listPlotOptions.setCurveStyleLead(
+            F.list(F.Opacity(F.num(1.0)), F.FaceForm(F.Opacity(F.num(0.3)))));
         IASTMutable listPlot = ast.setAtCopy(1, listOfLines);
         IAST graphicsPrimitives = plot(listPlot, options, listPlotOptions, engine);
 
