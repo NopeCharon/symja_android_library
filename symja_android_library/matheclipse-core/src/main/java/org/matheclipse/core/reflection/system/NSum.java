@@ -20,6 +20,7 @@ import org.matheclipse.core.numerics.series.dp.complex.SeriesAlgorithmComplex.Se
 import org.matheclipse.core.numerics.utils.Sequences;
 import org.matheclipse.core.numerics.series.PrecisionSum;
 import org.matheclipse.parser.client.ParserConfig;
+import org.matheclipse.core.eval.TimeLimits;
 import org.apfloat.Apcomplex;
 import org.apfloat.Apfloat;
 import org.matheclipse.core.numerics.series.IntegerSeriesSum;
@@ -221,6 +222,16 @@ public class NSum extends Sum {
         // index, like BesselJZero(0, k), aren't probed between the integers
         return integerSeriesSum(arg1, variable, lowerLimit, digits, engine);
       }
+      if (variable.isSymbol() && upperLimit.isInfinity()) {
+        IExpr closed = exponentialClosedForm(arg1, (ISymbol) variable, lowerLimit, digits, engine);
+        if (closed.isPresent()) {
+          return closed;
+        }
+        if (F.isPresent(start) && termsDontVanish(arg1, (ISymbol) variable, engine)) {
+          // an extrapolation of the partial sums would give a finite number
+          return F.CComplexInfinity;
+        }
+      }
       if (variable.isSymbol()) {
         IExpr precise = precisionSum(arg1, (ISymbol) variable, lowerLimit, upperLimit, digits,
             engine);
@@ -253,6 +264,80 @@ public class NSum extends Sum {
       }
     }
     return F.NIL;
+  }
+
+  /** The time budget of {@link #exponentialClosedForm}. */
+  private static final long CLOSED_FORM_MILLIS = 3000L;
+
+  /**
+   * The value of an infinite sum whose summand has a power with the index in its exponent,
+   * <code>E^(-k/10^5)</code> or <code>k*0.999^k</code>, from the closed form of the exact sum. Such a
+   * series converges like a geometric one with a ratio next to 1: its partial sums go on growing
+   * far beyond the terms which an extrapolation looks at.
+   *
+   * @return <code>ComplexInfinity</code> if the exact sum is infinite, {@link F#NIL} if the
+   *         summand has no such power or the sum no closed form in time
+   */
+  private static IExpr exponentialClosedForm(IExpr summand, ISymbol k, IExpr lowerLimit,
+      long digits, EvalEngine engine) {
+    if (!lowerLimit.isInteger() || summand.isFree(x -> x.isPower() && !x.exponent().isFree(k)
+        && x.base().isFree(k), true)) {
+      return F.NIL;
+    }
+    final IExpr exact =
+        org.matheclipse.core.expression.AbstractFractionSym.rationalize(summand, false)
+            .orElse(summand);
+    IExpr closed = TimeLimits.evaluateOrNil(F.Sum(exact, F.List(k, lowerLimit, F.CInfinity)),
+        org.matheclipse.core.basic.MachineProfile.millis(CLOSED_FORM_MILLIS));
+    if (closed.isNIL() || !closed.isFreeAST(S.Sum)) {
+      return F.NIL;
+    }
+    if (closed.isDirectedInfinity()) {
+      // the exact sum diverges
+      return F.CComplexInfinity;
+    }
+    if (!closed.isNumericFunction(true)) {
+      return F.NIL;
+    }
+    // a closed form like 1/(E^(1/10^5)-1) cancels digits: evaluated with more of them
+    final long working = Math.max(digits, ParserConfig.MACHINE_PRECISION) + 20;
+    IExpr value = engine.evalN(closed, working);
+    if (!value.isNumber()) {
+      return F.NIL;
+    }
+    if (digits > ParserConfig.MACHINE_PRECISION) {
+      return engine.evalN(value, digits);
+    }
+    // the machine number of the value with more digits
+    return value.isReal() ? F.num(value.evalf()) : F.complexNum(value.evalfc());
+  }
+
+  /** The time budget of {@link #termsDontVanish}. */
+  private static final long TERM_LIMIT_MILLIS = 2000L;
+
+  /**
+   * Whether the terms of the series don't tend to 0: the limit of the summand at infinity is a
+   * number other than 0 or an infinity. A limit which doesn't exist comes back as
+   * <code>Indeterminate</code> also for terms which tend to 0, like <code>(-1)^k/k</code>, and
+   * decides nothing.
+   */
+  private static boolean termsDontVanish(IExpr summand, ISymbol k, EvalEngine engine) {
+    if (!summand.isFree(S.NSum, true)) {
+      return false;
+    }
+    IExpr limit = TimeLimits.evaluateOrNil(F.Limit(summand, F.Rule(k, F.CInfinity)),
+        org.matheclipse.core.basic.MachineProfile.millis(TERM_LIMIT_MILLIS));
+    if (limit.isNIL()) {
+      return false;
+    }
+    if (limit.isDirectedInfinity()) {
+      return !limit.isIndeterminate();
+    }
+    if (!limit.isNumericFunction(true)) {
+      return false;
+    }
+    IExpr value = engine.evalN(limit);
+    return value.isNumber() && !value.isZero();
   }
 
   /** The most terms which {@link #finiteSumOfTerms} adds one by one. */

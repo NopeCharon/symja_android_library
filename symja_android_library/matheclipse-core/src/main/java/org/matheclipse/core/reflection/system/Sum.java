@@ -14,6 +14,7 @@ import org.matheclipse.core.convert.VariablesSet;
 import org.matheclipse.core.eval.AlgebraUtil;
 import org.matheclipse.core.eval.Errors;
 import org.matheclipse.core.eval.EvalEngine;
+import org.matheclipse.core.eval.TimeLimits;
 import org.matheclipse.core.eval.exception.RecursionLimitExceeded;
 import org.matheclipse.core.eval.exception.ValidateException;
 import org.matheclipse.core.eval.interfaces.IFunctionEvaluator;
@@ -703,6 +704,13 @@ public class Sum extends ListFunctions.Table implements SumRules {
           }
         }
 
+        if (preevaledSum.isAST2()) {
+          // a long range of a rational summand: a closed form instead of millions of fractions
+          IExpr longRange = longRationalRangeSum(preevaledSum.arg1(), lastList, engine);
+          if (longRange.isPresent()) {
+            return longRange;
+          }
+        }
         IExpr temp = evaluateTableThrow(preevaledSum, Plus(), Plus(), engine);
         if (temp.isPresent()) {
           return temp;
@@ -842,6 +850,175 @@ public class Sum extends ListFunctions.Table implements SumRules {
 
   /** Integer ranges up to this many terms are written out term by term. */
   private static final int ENUMERATION_LIMIT = 1_000_000;
+
+  /** The number of terms from which a rational summand is summed in closed form. */
+  private static final int LONG_RANGE = 10_000;
+
+  /** The time budget of the closed form of a sum over a long range. */
+  private static final long LONG_RANGE_MILLIS = 10_000L;
+
+  /**
+   * <code>Sum(f, {k, a, b})</code> and <code>Sum(f, {k, a, b, d})</code> with integers
+   * <code>a</code>, <code>b</code>, <code>d</code> over at least {@link #LONG_RANGE} terms of an
+   * exact rational function <code>f</code> of <code>k</code>: the sum with a symbolic upper bound
+   * at <code>b</code>, or the partial fractions of <code>f</code> summed with
+   * <code>PolyGamma</code>, see {@link #partialFractionRangeSum}.
+   *
+   * @return {@link F#NIL} if the sum isn't of this kind or has no closed form in time
+   */
+  private static IExpr longRationalRangeSum(IExpr summand, IAST iterator, EvalEngine engine) {
+    if (iterator.argSize() < 3 || iterator.argSize() > 4 || !iterator.arg1().isSymbol()) {
+      return F.NIL;
+    }
+    final ISymbol k = (ISymbol) iterator.arg1();
+    IExpr from = engine.evaluate(iterator.arg2());
+    IExpr to = engine.evaluate(iterator.arg3());
+    IExpr step = iterator.argSize() == 4 ? engine.evaluate(iterator.arg4()) : F.C1;
+    if (!from.isInteger() || !to.isInteger() || !step.isInteger() || !((IInteger) step).isPositive()
+        || summand.isFree(k) || !summand.isFree(x -> x.isInexactNumber(), false)) {
+      return F.NIL;
+    }
+    IInteger count = ((IInteger) to).subtract((IInteger) from).div((IInteger) step);
+    if (count.isLT(F.ZZ(LONG_RANGE)) || !isRationalFunction(summand, k, engine)) {
+      return F.NIL;
+    }
+    if (!step.isOne()) {
+      // k == a + d*j for j == 0, ..., (b-a)/d
+      ISymbol j = F.Dummy("j");
+      IExpr reindexed = engine.evaluate(F.Together(F.subst(summand, k,
+          F.Plus(from, F.Times(step, j)))));
+      return longRationalRangeSum(reindexed, F.List(j, F.C0, count), engine);
+    }
+    final IExpr upper = to;
+    // the closed form with a symbolic upper bound first: it is telescoping where it can be,
+    // 1/(k*(k+1)) sums to 1-1/(n+1); a short budget, since it gives up slowly on a cubic
+    IExpr closed = TimeLimits.call(engine, () -> {
+      ISymbol n = F.Dummy("n");
+      IExpr symbolic = engine.evalQuiet(F.Sum(summand, F.List(k, from, n)));
+      if (symbolic.isPresent() && symbolic.isFreeAST(S.Sum) && symbolic.isFreeAST(S.DifferenceRoot)
+          && symbolic.isFree(k)) {
+        return engine.evaluate(F.subst(symbolic, n, upper));
+      }
+      return F.NIL;
+    }, org.matheclipse.core.basic.MachineProfile.millis(SYMBOLIC_BOUND_MILLIS), () -> F.NIL);
+    if (closed != null && closed.isPresent()) {
+      return closed;
+    }
+    closed = TimeLimits.call(engine,
+        () -> partialFractionRangeSum(summand, k, (IInteger) from, (IInteger) upper, engine),
+        org.matheclipse.core.basic.MachineProfile.millis(LONG_RANGE_MILLIS), () -> F.NIL);
+    return closed == null ? F.NIL : closed;
+  }
+
+  /** The time budget of the sum with a symbolic upper bound in {@link #longRationalRangeSum}. */
+  private static final long SYMBOLIC_BOUND_MILLIS = 2_000L;
+
+  /**
+   * The sum of the rational function <code>f</code> of <code>k</code> from <code>a</code> to
+   * <code>b</code> by its partial fractions: a polynomial part is summed in closed form; a term
+   * <code>p(k)/q(k)</code> with an irreducible <code>q</code> is
+   * <code>RootSum(q, p(r)/q'(r)*(PolyGamma(0, b+1-r) - PolyGamma(0, a-r)))</code>; a term
+   * <code>c/(k-r)^m</code> is
+   * <code>c*(-1)^m/(m-1)!*(PolyGamma(m-1, a-r) - PolyGamma(m-1, b+1-r))</code>.
+   *
+   * @return {@link F#NIL} if a pole lies on the range, or a power of a nonlinear factor occurs
+   */
+  private static IExpr partialFractionRangeSum(IExpr f, ISymbol k, IInteger a, IInteger b,
+      EvalEngine engine) {
+    IExpr apart = engine.evaluate(F.Apart(f, k));
+    IAST terms = apart.isPlus() ? (IAST) apart : F.List(apart);
+    IASTAppendable result = F.PlusAlloc(terms.argSize());
+    IASTAppendable polynomial = F.PlusAlloc(terms.argSize());
+    final IExpr upper = b.inc();
+    for (IExpr term : terms) {
+      engine.checkTimeLimit();
+      if (term.isPolynomial(F.list(k))) {
+        polynomial.append(term);
+        continue;
+      }
+      IExpr numerator = engine.evaluate(F.Numerator(term));
+      IExpr denominator = engine.evaluate(F.Denominator(term));
+      IExpr base = denominator;
+      int m = 1;
+      IExpr constant = F.C1;
+      // c*q^m: the constant factor and the power
+      if (denominator.isTimes()) {
+        IASTAppendable rest = F.TimesAlloc(denominator.argSize());
+        for (IExpr factor : (IAST) denominator) {
+          if (factor.isFree(k)) {
+            constant = F.Times(constant, factor);
+          } else {
+            rest.append(factor);
+          }
+        }
+        if (rest.argSize() != 1) {
+          return F.NIL;
+        }
+        base = rest.arg1();
+      }
+      if (base.isPower() && base.exponent().isInteger() && base.exponent().toIntDefault() > 1) {
+        m = base.exponent().toIntDefault();
+        base = base.base();
+      }
+      numerator = engine.evaluate(F.Divide(numerator, constant));
+      IExpr degree = engine.evaluate(F.Exponent(base, k));
+      if (!degree.isInteger() || !((IInteger) degree).isPositive()) {
+        return F.NIL;
+      }
+      if (degree.isOne()) {
+        // base == c1*k + c0, the pole r == -c0/c1
+        IExpr c1 = engine.evaluate(F.Coefficient(base, k, F.C1));
+        IExpr r = engine.evaluate(F.Negate(F.Divide(F.subst(base, k, F.C0), c1)));
+        if (r.isInteger() && !((IInteger) r).isLT(a) && !b.isLT((IInteger) r)) {
+          // a pole on the range
+          return F.NIL;
+        }
+        IExpr c = engine.evaluate(F.Divide(numerator, F.Power(c1, F.ZZ(m))));
+        if (!c.isFree(k)) {
+          return F.NIL;
+        }
+        if (r.isInteger() && b.isLT((IInteger) r)) {
+          // a pole above the range: a - r and b + 1 - r are poles of PolyGamma; with j == r - k
+          // the sum is (-1)^m*Sum(1/j^m, {j, r-b, r-a})
+          result.append(F.Times(c, F.Power(F.Factorial(F.ZZ(m - 1)), F.CN1),
+              F.Subtract(F.PolyGamma(F.ZZ(m - 1), F.Subtract(r, b)),
+                  F.PolyGamma(F.ZZ(m - 1), F.Plus(F.Subtract(r, a), F.C1)))));
+          continue;
+        }
+        result.append(F.Times(c, F.Power(F.CN1, F.ZZ(m)), F.Power(F.Factorial(F.ZZ(m - 1)), F.CN1),
+            F.Subtract(F.PolyGamma(F.ZZ(m - 1), F.Subtract(a, r)),
+                F.PolyGamma(F.ZZ(m - 1), F.Subtract(upper, r)))));
+        continue;
+      }
+      if (m != 1) {
+        return F.NIL;
+      }
+      // the residue p(r)/q'(r) at each root r of the irreducible q
+      ISymbol r = F.Dummy("r");
+      IExpr residue = engine.evaluate(F.Divide(F.subst(numerator, k, r), F.subst(F.D(base, k), k, r)));
+      IExpr q = F.Function(F.subst(base, k, F.Slot1));
+      IExpr g = F.Function(F.subst(F.Times(residue, F.Subtract(F.PolyGamma(F.C0, F.Subtract(upper, r)),
+          F.PolyGamma(F.C0, F.Subtract(a, r)))), r, F.Slot1));
+      result.append(F.RootSum(q, g));
+    }
+    if (polynomial.argSize() > 0) {
+      ISymbol n = F.Dummy("n");
+      IExpr symbolic = engine.evalQuiet(F.Sum(polynomial.oneIdentity0(), F.List(k, a, n)));
+      if (!symbolic.isFreeAST(S.Sum)) {
+        return F.NIL;
+      }
+      result.append(F.subst(symbolic, n, b));
+    }
+    return engine.evaluate(result.oneIdentity0());
+  }
+
+  /** Whether <code>f</code> is a quotient of two polynomials in <code>k</code>. */
+  private static boolean isRationalFunction(IExpr f, ISymbol k, EvalEngine engine) {
+    IExpr together = engine.evaluate(F.Together(f));
+    IAST variables = F.list(k);
+    return engine.evaluate(F.Numerator(together)).isPolynomial(variables)
+        && engine.evaluate(F.Denominator(together)).isPolynomial(variables);
+  }
 
   /**
    * Test if <code>Sum(summand, {i, a, b})</code> runs over at most {@link #ENUMERATION_LIMIT}
@@ -1076,6 +1253,67 @@ public class Sum extends ListFunctions.Table implements SumRules {
     return F.NIL;
   }
 
+  /** The highest degree of the polynomial in {@link #polynomialTimesPowerSum}. */
+  private static final int MAX_ARITHMETIC_GEOMETRIC_DEGREE = 12;
+
+  /**
+   * <code>Sum(p(k)*r^k, {k, a, Infinity})</code> for a polynomial <code>p</code> and a number
+   * <code>r</code> with <code>Abs(r) &lt; 1</code>: with <code>k == a + j</code> and
+   * <code>p(a + j) == Sum(c_m*j^m)</code> it is
+   * <code>r^a*(c_0/(1 - r) + Sum(c_m*PolyLog(-m, r), {m, 1, deg p}))</code>.
+   *
+   * @return {@link F#NIL} if the summand isn't of this kind
+   */
+  private static IExpr polynomialTimesPowerSum(IExpr expr, ISymbol k, IInteger a,
+      EvalEngine engine) {
+    IExpr r = F.NIL;
+    IASTAppendable rest = F.TimesAlloc(2);
+    for (IExpr factor : expr.isTimes() ? (IAST) expr : F.List(expr)) {
+      if (factor.isPower() && factor.base().isFree(k) && !factor.exponent().isFree(k)
+          && r.isNIL()) {
+        // b^(e0 + e1*k) == b^e0*(b^e1)^k
+        IExpr exponent = factor.exponent();
+        if (!exponent.isPolynomial(F.list(k))
+            || !engine.evaluate(F.Exponent(exponent, k)).isOne()) {
+          return F.NIL;
+        }
+        IExpr e1 = engine.evaluate(F.Coefficient(exponent, k, F.C1));
+        IExpr e0 = engine.evaluate(F.subst(exponent, k, F.C0));
+        r = engine.evaluate(F.Power(factor.base(), e1));
+        rest.append(F.Power(factor.base(), e0));
+      } else {
+        rest.append(factor);
+      }
+    }
+    if (r.isNIL() || !r.isNumericFunction(true) || !r.isFree(x -> x.isInexactNumber(), false)
+        || !engine.evalTrue(F.Less(F.Abs(r), F.C1))) {
+      return F.NIL;
+    }
+    IExpr p = rest.oneIdentity1();
+    if (!p.isPolynomial(F.list(k))) {
+      return F.NIL;
+    }
+    ISymbol j = F.Dummy("j");
+    IExpr shifted = engine.evaluate(F.Expand(F.subst(p, k, F.Plus(a, j))));
+    IExpr degree = engine.evaluate(F.Exponent(shifted, j));
+    int n = degree.toIntDefault();
+    if (n < 0 || n > MAX_ARITHMETIC_GEOMETRIC_DEGREE) {
+      return F.NIL;
+    }
+    IASTAppendable sum = F.PlusAlloc(n + 1);
+    for (int m = 0; m <= n; m++) {
+      IExpr c = engine.evaluate(F.Coefficient(shifted, j, F.ZZ(m)));
+      if (!c.isFree(j)) {
+        return F.NIL;
+      }
+      sum.append(F.Times(c,
+          m == 0 ? F.Power(F.Subtract(F.C1, r), F.CN1) : F.PolyLog(F.ZZ(-m), r)));
+    }
+    // not over one denominator: 1-2*E^(1/10^5)+E^(2/10^5) loses ten digits of a machine number
+    // which (1-E^(1/10^5))^2 keeps
+    return engine.evaluate(F.Times(F.Power(r, a), sum));
+  }
+
   /**
    * Evaluate the definite sum: <code>Sum(arg1, {var, from, Infinity})</code>
    *
@@ -1142,6 +1380,11 @@ public class Sum extends ListFunctions.Table implements SumRules {
       if (hyper.isPresent()) {
         return hyper;
       }
+    }
+    if (from.isInteger()) {
+      // a polynomial times r^k, which the hypergeometric closed form leaves for a ratio like
+      // 999/1000
+      return polynomialTimesPowerSum(expr, var, (IInteger) from, engine);
     }
     return F.NIL;
   }

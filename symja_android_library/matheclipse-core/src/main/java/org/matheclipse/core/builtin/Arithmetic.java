@@ -81,6 +81,7 @@ import org.matheclipse.core.eval.interfaces.IRewrite;
 import org.matheclipse.core.eval.interfaces.ISetEvaluator;
 import org.matheclipse.core.eval.util.AbstractAssumptions;
 import org.matheclipse.core.eval.util.IAssumptions;
+import org.matheclipse.core.eval.util.NumberAccumulator;
 import org.matheclipse.core.eval.util.OpenIntToIExprHashMap;
 import org.matheclipse.core.expression.ASTRealMatrix;
 import org.matheclipse.core.expression.ASTRealVector;
@@ -2257,8 +2258,9 @@ public final class Arithmetic {
             }
             return F.QQ(HARMONIC_NUMERATOR[n - 1], HARMONIC_DENOMINATOR[n - 1]);
           }
+          // an iteration limit of n allows the n terms
           int iterationLimit = engine.getIterationLimit();
-          if ((iterationLimit >= 0 && iterationLimit <= n) || n > MAX_EXACT_HARMONIC_INDEX) {
+          if ((iterationLimit >= 0 && iterationLimit < n) || n > MAX_EXACT_HARMONIC_INDEX) {
             // too many terms for the exact sum, whose denominator has about 0.43 n digits;
             // unevaluated, so that N() can still get the value
             return F.NIL;
@@ -2328,8 +2330,12 @@ public final class Arithmetic {
             return C0;
           }
 
+          if (nInt > MAX_SYMBOLIC_ORDER_TERMS && !r.isNumericFunction(true)) {
+            // a symbolic order: only a few terms are written out
+            return F.NIL;
+          }
           int iterationLimit = EvalEngine.get().getIterationLimit();
-          if (iterationLimit >= 0 && iterationLimit <= nInt) {
+          if (iterationLimit >= 0 && iterationLimit < nInt) {
             // too many terms for the exact sum; unevaluated, so that N() can still get the value
             return F.NIL;
           }
@@ -2337,12 +2343,16 @@ public final class Arithmetic {
           if (F.isPresent(intArg2)) {
             final int exponent = Math.abs(intArg2);
             // added pairwise: the operands of each addition have about the same size
-            IRational result = F.sumRational(i -> {
+            NumberAccumulator accumulator = NumberAccumulator.sum(F.PlusAlloc(1), false);
+            for (int i = 1; i <= nInt; i++) {
+              if ((i & 255) == 0) {
+                engine.checkTimeLimit();
+              }
               final IInteger pow = F.ZZ(i).powerRational(exponent);
-              return intArg2 < 0 ? pow : pow.inverse();
-            }, 1, nInt);
-            result.checkBitLength();
-            return result;
+              accumulator.add(intArg2 < 0 ? pow : pow.inverse());
+            }
+            INumber result = accumulator.number();
+            return result == null ? F.C0 : result;
           }
 
           return F.sum(i -> Power(i, r.negate()), 1, nInt);
@@ -2350,6 +2360,9 @@ public final class Arithmetic {
         return F.NIL;
       }
     }
+
+    /** The largest index for which <code>HarmonicNumber(n, r)</code> of a symbolic r is written out. */
+    private static final int MAX_SYMBOLIC_ORDER_TERMS = 4;
 
     /** The largest index for which <code>HarmonicNumber(n, r, s)</code> is written out. */
     private static final int MAX_HARMONIC_TERMS = 1000;
@@ -2393,7 +2406,7 @@ public final class Arithmetic {
         return BigFraction.ZERO;
       else {
         int iterationLimit = EvalEngine.get().getIterationLimit();
-        if (iterationLimit >= 0 && iterationLimit <= n) {
+        if (iterationLimit >= 0 && iterationLimit < n) {
           IterationLimitExceeded.throwIt(n, F.HarmonicNumber(F.ZZ(n)));
         }
         // Sum(1/i, {i, 1, n}) by binary splitting: the numerators and denominators of the halves
@@ -3466,6 +3479,9 @@ public final class Arithmetic {
           return numResult;
         }
         if (ast.isUniform(UniformFlags.NUMBER)) {
+          if (ast.argSize() >= BALANCED_SUM_SIZE && ast.forAll(x -> x.isRational())) {
+            return balancedRationalSum(ast, engine);
+          }
           INumber numResult = (INumber) ast.arg1();
           for (int i = 2; i < ast.size(); i++) {
             final INumber summand = (INumber) ast.get(i);
@@ -3494,6 +3510,25 @@ public final class Arithmetic {
       // ast.builtinEvaled();
       // }
       return F.NIL;
+    }
+
+    /** The number of exact fractions from which {@link #balancedRationalSum} adds them. */
+    private static final int BALANCED_SUM_SIZE = 64;
+
+    /**
+     * The sum of the rational arguments of <code>ast</code>, added pairwise: one after the other,
+     * the denominators of the partial sums grow with each fraction, and n fractions cost n
+     * additions of the full size.
+     */
+    private static INumber balancedRationalSum(IAST ast, EvalEngine engine) {
+      NumberAccumulator accumulator = NumberAccumulator.sum(F.PlusAlloc(1), false);
+      for (int i = 1; i < ast.size(); i++) {
+        if ((i & 63) == 0) {
+          engine.checkTimeLimit();
+        }
+        accumulator.add(ast.get(i));
+      }
+      return accumulator.number();
     }
 
     protected IExpr evaluatePlusOp(IAST ast, EvalEngine engine) {
