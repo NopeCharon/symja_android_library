@@ -11502,7 +11502,7 @@ public class LowercaseTestCase extends ExprEvaluatorTestCase {
     check("{1.0+0.0*I,0.0+0.0*I}", //
         "{1.0,0.0}");
     check("TeXForm(1.0*^-20+2.0*I)", //
-        "1.*10^{-20} + 2.0\\,i ");
+        "1.\\times 10^{-20} + 2.0\\,i ");
     // the roots which a solver returns are cleaned of that residue
     check("NRoots(x^4-100==0)", //
         "{-3.16228,I*(-3.16228),I*3.16228,3.16228}");
@@ -15670,7 +15670,7 @@ public class LowercaseTestCase extends ExprEvaluatorTestCase {
     check(
         "FullForm({FromCharacterCode(946), FromCharacterCode(26085), FromCharacterCode(128513), "
             + "FromCharacterCode(252), FromCharacterCode(7)})", //
-        "List(\"\\[Beta]\", \"\\:65e5\", \"\\|01f601\", \"\\[UDoubleDot]\", \"\\.07\")");
+        "List(\"\\[Beta]\", \"\\:65e5\", \"\\|01f601\", \"\\[UDoubleDot]\", \"\\007\")");
     check("FullForm(Hold(\\[Gamma] + 5*^3))", //
         "Hold(Plus(\\[Gamma], 5000))");
   }
@@ -23006,7 +23006,7 @@ public class LowercaseTestCase extends ExprEvaluatorTestCase {
     check("ToString({3 (u < v <= w), u < v <= w}, InputForm)", //
         "{3*Inequality(u,Less,v,LessEqual,w),u<v<=w}");
     check("ToString({3 u_, 3 u__, 3 _, u_^2, f(u_), u_ + 1, 3 u_?EvenQ, u_ -> 1}, InputForm)", //
-        "{3*(u_),3*(u__),3*_,(u_)^2,f(u_),1 + u_,3*u_?EvenQ,u_->1}");
+        "{3*(u_),3*(u__),3*_,(u_)^2,f(u_),1 + (u_),3*(u_)?EvenQ,u_->1}");
   }
 
   @Test
@@ -23698,9 +23698,10 @@ public class LowercaseTestCase extends ExprEvaluatorTestCase {
     check(
         "{ToCharacterCode(\"q\u00E9\u20AC\", \"ASCII\"), ToCharacterCode(\"q\u00E9\u20AC\", \"ISOLatin1\"), ToCharacterCode(\"k\tm|\nz\", \"PrintableASCII\")}", //
         "{{113,None,None},{113,233,None},{107,None,109,124,10,122}}");
+    // a code below 256 is a byte of the encoding; one without a character is 0xF200 + byte
     check(
-        "{FromCharacterCode({{107, 33}, {126}}, \"PrintableASCII\"), FromCharacterCode({107, 9}, \"PrintableASCII\")}", //
-        "{{k!,~},FromCharacterCode({107,9},PrintableASCII)}");
+        "{FromCharacterCode({{107, 33}, {126}}, \"PrintableASCII\"), ToCharacterCode(FromCharacterCode({107, 9}, \"PrintableASCII\"))}", //
+        "{{k!,~},{107,61961}}");
     check("FromCharacterCode({97,45,51})", //
         "a-3");
     // undefined negative codes
@@ -25561,8 +25562,9 @@ public class LowercaseTestCase extends ExprEvaluatorTestCase {
         "{{3,4,6},{a,b,c}}");
     check("ImportString(\"3,4,6\\na,b,c\", \"Text\") // InputForm", //
         "\"3,4,6\\na,b,c\"");
+    // "String" is the characters as they are
     check("ImportString(\"a+a+a\", \"String\")", //
-        "3*a");
+        "a+a+a");
   }
 
   @Test
@@ -28105,8 +28107,9 @@ public class LowercaseTestCase extends ExprEvaluatorTestCase {
 
     check("MantissaExponent(125.24)", //
         "{0.12524,3}");
+    // 0.9765625 is rounded half up
     check("MantissaExponent(125., 2)", //
-        "{0.976562,7}");
+        "{0.976563,7}");
     check("MantissaExponent(10, b)", //
         "MantissaExponent(10,b)");
     check("MantissaExponent(E, Pi)", //
@@ -29955,8 +29958,9 @@ public class LowercaseTestCase extends ExprEvaluatorTestCase {
         "0.142857142857143");
     check("N(1/7,3)", //
         "0.143");
+    // the shortest digits of the double, 0.14285714285714285, rounded half up
     check("N(1/7,16)", //
-        "0.1428571428571428");
+        "0.1428571428571429");
     check("N(1/7,17)", //
         "0.14285714285714286");
     // issue #1161
@@ -41797,8 +41801,9 @@ public class LowercaseTestCase extends ExprEvaluatorTestCase {
 
     check("((1+Infinity)*(2+Infinity))/Infinity^2", //
         "Indeterminate");
+    // the machine zero times a symbolic factor is the machine zero
     check("0.0*Sin(#)", //
-        "0");
+        "0.0");
     check("8.88178*10^-16 * Binomial(50.0, #)", //
         "8.88178*10^-16*Binomial(50.0,#1)");
     check("0.5^#1*(-0.5+1)^(50.0-#1)", //

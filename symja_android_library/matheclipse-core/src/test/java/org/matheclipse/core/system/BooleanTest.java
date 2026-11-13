@@ -27,13 +27,13 @@ public class BooleanTest extends ExprEvaluatorTestCase {
   public void testAnd() {
     // a symbol and its negation
     check("And(a, True, !a)", //
-        "False");
+        "a&&!a");
     check("And(b, a, True, c, !a)", //
-        "False");
+        "b&&a&&c&&!a");
     check("Or(a, False, !a)", //
-        "True");
+        "a||!a");
     check("Or(b, False, c, !b)", //
-        "True");
+        "b||c||!b");
     // False with a later Undefined is Undefined, also behind a first argument
     check("And(False, Undefined)", //
         "Undefined");
@@ -142,7 +142,7 @@ public class BooleanTest extends ExprEvaluatorTestCase {
     check("BooleanConvert((a && !b || !a && b) && " //
         + "(c && b && !a && !d && !e || c && !b && a && !d && !e || c && !b && !a && d && !e || c && !b && !a && !d && e || !c && b && a && !d && !e || !c && b && !a && d && !e || !c && b && !a && !d && e || !c && !b && a && d && !e || !c && !b && a && !d && e || !c && !b && !a && d && e) && "
         + "(a && !f || !a && f) && (e && !c || !e && c), \"CNF\")", //
-        "(a||b)&&(a||!b||c||d||e)&&(a||!b||c||d||!e||f)&&(a||!b||c||!d)&&(a||!b||!c||d||e||f)&&(a||!b||!c||d||!e)&&(a||!b||!c||!d)&&(!a||b||c||d||e)&&(!a||b||c||d||!e||!f)&&(!a||b||c||!d)&&(!a||b||!c||d||e||!f)&&(!a||b||!c||d||!e)&&(!a||b||!c||!d)&&(!a||!b)");
+        "(!a||!b)&&(!a||!c||!e)&&(!a||!c||!f)&&(!a||c||e)&&(!a||!d)&&(!a||!e||!f)&&(a||b)&&(!b||!c||!e)&&(!b||!c||f)&&(!b||c||e)&&(!b||!d)&&(!b||!e||f)");
 
     check("BooleanConvert((a||b)&&(c||d), \"CNF\")", //
         "(a||b)&&(c||d)");
@@ -157,13 +157,13 @@ public class BooleanTest extends ExprEvaluatorTestCase {
     check("BooleanConvert(! (a || b || c), \"CNF\")", //
         "!a&&!b&&!c");
     check("BooleanConvert(Xor(x,y), \"CNF\")", //
-        "(x||y)&&(!x||!y)");
+        "(!x||!y)&&(x||y)");
     check("BooleanConvert(Xnor(x,y))", //
         "(x&&y)||(!x&&!y)");
     check("BooleanConvert(Xnor(x,y), \"CNF\")", //
-        "(x||!y)&&(!x||y)");
+        "(!x||y)&&(x||!y)");
     check("BooleanConvert(Xor(p,q,r),\"CNF\")", //
-        "(p||q||r)&&(p||!q||!r)&&(!p||q||!r)&&(!p||!q||r)");
+        "(!p||!q||r)&&(!p||q||!r)&&(p||!q||!r)&&(p||q||r)");
     check("BooleanConvert(Nand(p, q, r), \"CNF\")", //
         "!p||!q||!r");
     check("BooleanConvert(!Nand(p, q, r), \"CNF\")", //
@@ -177,7 +177,7 @@ public class BooleanTest extends ExprEvaluatorTestCase {
     check("BooleanConvert(! (a || b || c), \"CNF\")", //
         "!a&&!b&&!c");
     check("BooleanConvert(Equivalent(x, y, z), \"CNF\")", //
-        "(x||y||!z)&&(x||!y)&&(!x||y)&&(!x||!y||z)");
+        "(!x||y)&&(!x||z)&&(x||!y)&&(y||!z)");
 
     check("BooleanConvert(Implies(x, y))", //
         "!x||y");
@@ -1078,11 +1078,11 @@ public class BooleanTest extends ExprEvaluatorTestCase {
     check("LogicalExpand(a && b && ! a)", //
         "False");
     check("LogicalExpand(Xor(p, q, r))", //
-        "(p&&q&&r)||(p&&!q&&!r)||(!p&&q&&!r)||(!p&&!q&&r)");
+        "(p&&q&&r)||(p&&!q&&!r)||(q&&!p&&!r)||(r&&!p&&!q)");
     check("LogicalExpand(Xor(p, q, r, s))", //
-        "(p&&q&&r&&!s)||(p&&q&&!r&&s)||(p&&!q&&r&&s)||(p&&!q&&!r&&!s)||(!p&&q&&r&&s)||(!p&&q&&!r&&!s)||(!p&&!q&&r&&!s)||(!p&&!q&&!r&&s)");
+        "(p&&q&&r&&!s)||(p&&q&&s&&!r)||(p&&r&&s&&!q)||(p&&!q&&!r&&!s)||(q&&r&&s&&!p)||(q&&!p&&!r&&!s)||(r&&!p&&!q&&!s)||(s&&!p&&!q&&!r)");
     check("LogicalExpand(Xor(p, q, r, s, t))", //
-        "(p&&q&&r&&s&&t)||(p&&q&&r&&!s&&!t)||(p&&q&&!r&&s&&!t)||(p&&q&&!r&&!s&&t)||(p&&!q&&r&&s&&!t)||(p&&!q&&r&&!s&&t)||(p&&!q&&!r&&s&&t)||(p&&!q&&!r&&!s&&!t)||(!p&&q&&r&&s&&!t)||(!p&&q&&r&&!s&&t)||(!p&&q&&!r&&s&&t)||(!p&&q&&!r&&!s&&!t)||(!p&&!q&&r&&s&&t)||(!p&&!q&&r&&!s&&!t)||(!p&&!q&&!r&&s&&!t)||(!p&&!q&&!r&&!s&&t)");
+        "(p&&q&&r&&s&&t)||(p&&q&&r&&!s&&!t)||(p&&q&&s&&!r&&!t)||(p&&q&&t&&!r&&!s)||(p&&r&&s&&!q&&!t)||(p&&r&&t&&!q&&!s)||(p&&s&&t&&!q&&!r)||(p&&!q&&!r&&!s&&!t)||(q&&r&&s&&!p&&!t)||(q&&r&&t&&!p&&!s)||(q&&s&&t&&!p&&!r)||(q&&!p&&!r&&!s&&!t)||(r&&s&&t&&!p&&!q)||(r&&!p&&!q&&!s&&!t)||(s&&!p&&!q&&!r&&!t)||(t&&!p&&!q&&!r&&!s)");
   }
 
   @Test

@@ -163,6 +163,8 @@ public class Errors {
       "bldim", "The arguments `1` and `2` do not have compatible dimensions.", //
       "bmod", "Modulus `1` must be an integer or an irreducible univariate polynomial.", //
       "cadop", "`1` is not a valid CylindricalDecomposition output specification.", //
+      "newls",
+      "The function `1` does not give a list of the same length when applied to list `2`.", //
       "nrtpi",
       "`1` is not a logical formula consisting of polynomial equations and inequalities in `2` with rational number coefficients.", //
       "facim", "Factoring noninteger polynomials with respect to a modulus is not implemented.", //
@@ -312,6 +314,9 @@ public class Errors {
       "ifun", "Inverse functions are being used. Values may be lost for multivalued inverses.", //
       "ilsmn",
       "Single or list of non-negative machine-sized integers expected at position `1` of `2`.", //
+      "iseq", "Invalid sequence specification `1` for an expression of length `2`.", //
+      "ilsmp",
+      "Single or list of positive machine-sized integers expected at position `1` of `2`.", //
       "ilsnn", "Single or list of non-negative integers expected at position `1`.", //
       "imginv", "Expecting an image or graphics instead of `1`.", //
       "incmp", "The arguments `1` and `2` in `3` are incompatible.", //
@@ -387,7 +392,7 @@ public class Errors {
       "lend",
       "The argument at position `1` in `2` should be a vector of unsigned byte values or a Base64 encoded string.", //
       "length", "The vectors `1` and `2` have different lengths.", //
-      "level", "Level specification `1` is not of the form n, {n}, or {m, n}.", //
+      "level", "Level specification `1` is not of the form n, {n} or {m, n}.", //
       "levelpad",
       "The padding specification `1` involves `2` levels, the list `3` has only `4` level.", //
       "libload", "The function `1` was not loaded from the file `2`.", //
@@ -515,6 +520,8 @@ public class Errors {
       "normal", "Nonatomic expression expected at position `1` in `2`.", //
       "nosol", "Linear equation encountered that has no solution.", //
       "nostr", "`1` is not a string.", //
+      "notinenc",
+      "The character '`1`' (code point `2`) cannot be represented in character encoding `3`.", //
       "notstr", "The format type `1` is valid only for string input.", //
       "notstrbox",
       "`1` is not a string or a box. ToExpression can only interpret strings or boxes as input.", //
@@ -556,6 +563,7 @@ public class Errors {
       "optnf", "Option name `2` not found in defaults for `1`.", //
       "opttf", "Value of option `1` -> `2` should be True or False.", //
       "opttfa", "Value of option `1` -> `2` should be True, False or Automatic.", //
+      "moptx", "Method option `1` in `2` is not one of `3`.", //
       "optx", "Unknown option `1` in `2`.", //
       "orekitdata", "The external Orekit data files are not available: `1`", //
       "overdet", "The system is overdetermined .", //
@@ -636,6 +644,7 @@ public class Errors {
       "rctndmln",
       "The argument `1` at position `2` should be a list containing two rectangular arrays of real numbers where each array has length greater than its dimension.", //
       "realprm", "Parameter `1` at position `2` in `3` is expected to be real.", //
+      "readn", "Invalid real number found when reading from `1`.", //
       "realx", "The value `1` is not a real number.", //
       "reclim2", "Recursion depth of `1` exceeded during evaluation of `2`.", //
       "rect", "Nonrectangular tensor encountered", //
@@ -646,6 +655,8 @@ public class Errors {
       "reppoint", "`1` contains repeated integers.", //
       "reps",
       "(`1`) is neither a list of replacement rules nor a valid dispatch table and cannot be used for replacing.", //
+      "reqsigz",
+      "Requested number precision is lower than number of digits shown; padding with zeros.", //
       "rneg", "The specified rule number `1` should be non-negative.", //
       "rnkz", "A rank decomposition does not exist for a rank 0 matrix.", "root",
       "Unable to determine the appropriate root for the periodic continued fraction.", //
@@ -678,6 +689,7 @@ public class Errors {
       "seqs", //
       "Sequence specification (+n,-n,{+n},{-n},{m,n}) or {m,n,s} expected at position `2` in `1`.", //
       "seqso", "Sequence specification (+n,-n,{+n},{-n} or {m,n}) expected at position `2` in `1`.", //
+      "serlim", "Series order specification `1` is not a machine-sized integer.", //
       "setp", "Part assignment to `1` could not be made", //
       "setraw", "Cannot assign to raw object `1`.", //
       "setps", "`1` in the part assignment is not a symbol.", //

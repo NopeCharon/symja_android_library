@@ -2779,6 +2779,10 @@ public final class Arithmetic {
             }
             return F.Times(F.Sign(im), F.CInfinity);
           }
+          IExpr part = Arithmetic.Re.infinitePart(im, engine);
+          if (part.isPresent()) {
+            return part;
+          }
         }
       }
       if (expr.isNumber()) {
@@ -4796,6 +4800,15 @@ public final class Arithmetic {
       if (exponent.isMinusOne()) {
         return F.C0;
       }
+      if (exponent.isRational() && directedInfinity.isAST1()
+          && directedInfinity.arg1().isNumericFunction(false)) {
+        // (z*Infinity)^r for a rational r: zero for r<0, and for r>0 the infinity in the direction
+        // of z^r, because Arg(z*t) is Arg(z) for every t>0
+        if (exponent.isNegative()) {
+          return F.C0;
+        }
+        return F.DirectedInfinity(F.Power(directedInfinity.arg1(), exponent));
+      }
       return F.NIL;
     }
 
@@ -6394,6 +6407,29 @@ public final class Arithmetic {
       return (ast.argSize() == 1);
     }
 
+    /**
+     * The real or imaginary part of an infinity from that part of its direction, which is an exact
+     * real value like <code>1/Sqrt(2)</code>.
+     *
+     * @return <code>Infinity</code>, <code>-Infinity</code> or <code>0</code>; {@link F#NIL} if the
+     *         sign of the part isn't known
+     */
+    static IExpr infinitePart(IExpr directionPart, EvalEngine engine) {
+      if (directionPart.isRealResult() && directionPart.isNumericFunction(false)) {
+        final IExpr sign = engine.evaluate(F.Sign(directionPart));
+        if (sign.isZero()) {
+          return F.C0;
+        }
+        if (sign.isOne()) {
+          return F.CInfinity;
+        }
+        if (sign.isMinusOne()) {
+          return F.CNInfinity;
+        }
+      }
+      return F.NIL;
+    }
+
     public static IExpr evalRe(IExpr expr, EvalEngine engine) {
       if (expr.isDirectedInfinity()) {
         IAST directedInfininty = (IAST) expr;
@@ -6410,6 +6446,10 @@ public final class Arithmetic {
               return F.C0;
             }
             return F.Times(F.Sign(re), F.CInfinity);
+          }
+          IExpr part = infinitePart(engine.evaluate(re), engine);
+          if (part.isPresent()) {
+            return part;
           }
         }
       }
@@ -6966,6 +7006,12 @@ public final class Arithmetic {
 
     @Override
     public IExpr evaluate(final IAST ast, EvalEngine engine) {
+      if (ast.arg1().isList() && ast.arg2().isList()
+          && ast.arg1().argSize() != ast.arg2().argSize()) {
+        // lists of different lengths, which threading could not pair: the difference stays as it
+        // is
+        return F.NIL;
+      }
       // arg1 + (-1)*arg2
       return F.Subtract(ast.arg1(), ast.arg2());
     }
@@ -7533,9 +7579,12 @@ public final class Arithmetic {
         }
         return S.Indeterminate;
       }
-      if (zeroArg.isExactNumber() //
-          || zeroArg.equals(F.CD0)) {
+      if (zeroArg.isExactNumber()) {
         return F.C0;
+      }
+      if (zeroArg.equals(F.CD0)) {
+        // the machine zero times a symbolic factor is the machine zero
+        return F.CD0;
       }
       return F.NIL;
     }

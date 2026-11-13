@@ -449,6 +449,11 @@ public class ParametricPlot extends Plot {
         // region or a pole keeps a single colour instead of being read as several curves
         IASTAppendable segments = F.ListAlloc(4);
         IASTAppendable linePoints = F.ListAlloc(steps);
+        // the sample before this one: its parameter, whether the curve has a point there and
+        // whether the region takes it
+        double previousT = Double.NaN;
+        boolean previousFinite = false;
+        boolean previousDrawn = false;
 
         for (int i = 0; i <= steps; i++) {
           double t = tMinD + i * step;
@@ -459,24 +464,22 @@ public class ParametricPlot extends Plot {
               segments.append(linePoints);
             }
             linePoints = F.ListAlloc(steps);
+            previousFinite = false;
           }
-          IExpr tVal = F.num(t);
-          IExpr xExpr = F.subst(fx, F.Rule(tSym, tVal));
-          IExpr yExpr = F.subst(fy, F.Rule(tSym, tVal));
-
-          boolean drawn = false;
-          try {
-            double x = engine.evalDouble(xExpr);
-            double y = engine.evalDouble(yExpr);
-            if (Double.isFinite(x) && Double.isFinite(y)
-                && (region == null || region.accepts(x, y, t))) {
-              linePoints.append(graphicsOptions.parametricPoint(x, y, t));
-              drawn = true;
+          double[] point = curvePoint(fx, fy, tSym, t, engine);
+          boolean drawn =
+              point != null && (region == null || region.accepts(point[0], point[1], t));
+          if (region != null && point != null && previousFinite && drawn != previousDrawn) {
+            // the region ends or begins between the two samples: the curve runs up to its edge
+            double[] edge = drawn ? regionEdge(fx, fy, tSym, t, previousT, region, engine)
+                : regionEdge(fx, fy, tSym, previousT, t, region, engine);
+            if (edge != null) {
+              linePoints.append(graphicsOptions.parametricPoint(edge[0], edge[1], edge[2]));
             }
-          } catch (RuntimeException e) {
-            // Ignore
           }
-          if (!drawn) {
+          if (drawn) {
+            linePoints.append(graphicsOptions.parametricPoint(point[0], point[1], t));
+          } else {
             // the curve is broken where it has no value, or where the region ends, rather than
             // jumped across
             if (linePoints.argSize() > 1) {
@@ -484,6 +487,9 @@ public class ParametricPlot extends Plot {
             }
             linePoints = F.ListAlloc(steps);
           }
+          previousT = t;
+          previousFinite = point != null;
+          previousDrawn = drawn;
         }
         if (linePoints.argSize() > 1) {
           segments.append(linePoints);
@@ -497,6 +503,55 @@ public class ParametricPlot extends Plot {
     }
 
     return listOfLines;
+  }
+
+  /**
+   * The point <code>{x, y}</code> of the curve <code>{fx, fy}</code> at the parameter
+   * <code>t</code>.
+   *
+   * @return <code>null</code> where the curve has no finite point
+   */
+  private static double[] curvePoint(IExpr fx, IExpr fy, ISymbol tSym, double t,
+      EvalEngine engine) {
+    try {
+      IAST rule = F.Rule(tSym, F.num(t));
+      double x = engine.evalDouble(F.subst(fx, rule));
+      double y = engine.evalDouble(F.subst(fy, rule));
+      if (Double.isFinite(x) && Double.isFinite(y)) {
+        return new double[] {x, y};
+      }
+    } catch (RuntimeException rex) {
+      Errors.rethrowsInterruptException(rex);
+      // no point at this parameter
+    }
+    return null;
+  }
+
+  /**
+   * The last point of the curve <code>{fx, fy}</code> the region takes on the way from the
+   * parameter <code>inside</code>, where the region takes the curve, to the parameter
+   * <code>outside</code>, where it does not; found by bisection of the parameter.
+   *
+   * @return <code>{x, y, t}</code>, or <code>null</code> if no point nearer to the edge than the
+   *         one at <code>inside</code> is found
+   */
+  private static double[] regionEdge(IExpr fx, IExpr fy, ISymbol tSym, double inside,
+      double outside, RegionFunctionFilter region, EvalEngine engine) {
+    double[] edge = null;
+    for (int n = 0; n < 48; n++) {
+      double mid = 0.5 * (inside + outside);
+      if (mid == inside || mid == outside) {
+        break;
+      }
+      double[] point = curvePoint(fx, fy, tSym, mid, engine);
+      if (point != null && region.accepts(point[0], point[1], mid)) {
+        inside = mid;
+        edge = new double[] {point[0], point[1], mid};
+      } else {
+        outside = mid;
+      }
+    }
+    return edge;
   }
 
   /** Whether a cut lies behind <code>from</code> and not behind <code>to</code>. */

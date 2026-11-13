@@ -1584,7 +1584,7 @@ public class PatternMatcher extends IPatternMatcher implements Externalizable {
           IExpr optionalValue =
               (optional.isAST2()) ? optional.arg2() : patternHead.getDefaultValue();
           if (optionalValue.isPresent()) {
-            if (matchSubExpr(temp.first(), optionalValue, engine)) {
+            if (matchOptionalDefault(temp.first(), optionalValue, engine)) {
               continue;
             }
           }
@@ -2464,6 +2464,28 @@ public class PatternMatcher extends IPatternMatcher implements Externalizable {
     return F.NIL;
   }
 
+  /**
+   * Match the default value of <code>Optional(pattern, value)</code>. A named pattern
+   * <code>x:p:v</code> takes its default <code>v</code> also where <code>p</code> doesn't match it.
+   */
+  private boolean matchOptionalDefault(IExpr pattern, IExpr value, EvalEngine engine) {
+    if (matchSubExpr(pattern, value, engine)) {
+      return true;
+    }
+    if (pattern instanceof PatternNested
+        && ((PatternNested) pattern).getPatternExpr().isFree(x -> x instanceof IPatternObject
+            && ((IPatternObject) x).getSymbol() != null, true)) {
+      // only where the pattern has no names of its own, which would stay without a value
+      IPatternObject named = (IPatternObject) pattern;
+      IExpr bound = fPatternMap.getValue(named);
+      if (bound != null) {
+        return bound.equals(value);
+      }
+      return fPatternMap.setValue(named, value);
+    }
+    return false;
+  }
+
   private boolean isOptionalOrDefaultPattern(IExpr temp, int i, ISymbol symbolWithDefaultValue,
       IASTAppendable cloned, boolean[] defaultValueMatched, EvalEngine engine) {
     if (temp.isPatternDefault()) {
@@ -2472,7 +2494,7 @@ public class PatternMatcher extends IPatternMatcher implements Externalizable {
         IExpr optionalValue =
             (optional.isAST2()) ? optional.arg2() : symbolWithDefaultValue.getDefaultValue();
         if (optionalValue.isPresent()) {
-          if (!(matchSubExpr(temp.first(), optionalValue, engine))) {
+          if (!matchOptionalDefault(temp.first(), optionalValue, engine)) {
             return true;
           }
           defaultValueMatched[0] = true;
@@ -2831,7 +2853,7 @@ public class PatternMatcher extends IPatternMatcher implements Externalizable {
           IExpr optionalValue =
               (optional.isAST2()) ? optional.arg2() : symbolWithDefaultValue.getDefaultValue();
           if (optionalValue.isPresent()) {
-            if (!(matchSubExpr(optional.arg1(), optionalValue, engine))) {
+            if (!matchOptionalDefault(optional.arg1(), optionalValue, engine)) {
               return F.NIL;
             }
             defaultValueMatched = true;

@@ -95,6 +95,7 @@ public class TreePlot extends AbstractFunctionOptionEvaluator {
     plotted = GraphGraphics.withPlotOptions(plotted, originalAST, 2);
     GraphGraphics graphics = new GraphGraphics(plotted);
     graphics.setTreeRoot(root, orientation);
+    graphics.setPlotOptions(originalAST, 2);
     return graphics.toGraphics();
 
   }

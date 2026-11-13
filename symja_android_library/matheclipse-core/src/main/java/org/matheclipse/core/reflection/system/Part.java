@@ -789,6 +789,11 @@ public final class Part extends AbstractFunctionEvaluator implements ISetEvaluat
             // Part `1` of `2` does not exist.
             return Errors.printMessage(head, "partw", F.list(listArg, arg1), engine);
           }
+          if (checkedPosition(arg1, indx) < 0) {
+            // the whole list of positions is reported, not the one which is missing
+            // Part `1` of `2` does not exist.
+            return Errors.printMessage(head, "partw", F.list(list, arg1), engine);
+          }
           IExpr ires = getIndex(arg1, indx, head, engine);
           if (ires.isPresent()) {
             if (p1 < ast.size()) {

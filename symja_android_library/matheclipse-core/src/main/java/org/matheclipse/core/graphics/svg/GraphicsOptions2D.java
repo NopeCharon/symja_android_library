@@ -162,28 +162,38 @@ public final class GraphicsOptions2D {
   // CPD-OFF option-rule loop of the 2D and the 3D option parsers
   public void parse(IAST ast, PrimitiveCollector collector) {
     for (int i = 2; i <= ast.argSize(); i++) {
-      IExpr arg = ast.get(i);
-      if (!arg.isRuleAST()) {
-        continue;
-      }
-      IAST rule = (IAST) arg;
-      IExpr key = rule.arg1();
-      // PlotRange -> Dynamic[r] is drawn with the current value of r, not as if it were absent
-      IExpr value = Dynamics.currentValue(rule.arg2());
-      if (!key.isBuiltInSymbol()) {
-        continue;
-      }
-      // CPD-ON
-      try {
-        apply(((IBuiltInSymbol) key).ordinal(), value, collector);
-      } catch (RuntimeException rex) {
-        // a malformed option falls back to its default rather than losing the picture
-      }
+      parseOption(ast.get(i), collector);
     }
     // the ticks styles go on top of the axes, frame and label styles, whichever order the
     // options were written in
     ticksStyle = ticksStyle(ticksStyleValue, axesStyle, collector);
     frameTicksStyle = ticksStyle(frameTicksStyleValue, frameStyle, collector);
+  }
+
+  /** Read an option <code>name -&gt; value</code>, or every option of a list of options. */
+  private void parseOption(IExpr arg, PrimitiveCollector collector) {
+    if (arg.isList()) {
+      for (IExpr option : (IAST) arg) {
+        parseOption(option, collector);
+      }
+      return;
+    }
+    if (!arg.isRuleAST()) {
+      return;
+    }
+    IAST rule = (IAST) arg;
+    IExpr key = rule.arg1();
+    // PlotRange -> Dynamic[r] is drawn with the current value of r, not as if it were absent
+    IExpr value = Dynamics.currentValue(rule.arg2());
+    if (!key.isBuiltInSymbol()) {
+      return;
+    }
+    // CPD-ON
+    try {
+      apply(((IBuiltInSymbol) key).ordinal(), value, collector);
+    } catch (RuntimeException rex) {
+      // a malformed option falls back to its default rather than losing the picture
+    }
   }
 
   /**

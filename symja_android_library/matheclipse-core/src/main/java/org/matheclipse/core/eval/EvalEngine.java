@@ -4683,6 +4683,16 @@ public class EvalEngine implements Serializable {
       if (headID == ID.Blank || headID == ID.BlankSequence || headID == ID.BlankNullSequence
           || headID == ID.Pattern || headID == ID.Optional || headID == ID.OptionsPattern
           || headID == ID.Repeated || headID == ID.RepeatedNull) {
+        if (headID == ID.Optional && ast.size() == 3 && ast.arg1().isAST(S.Pattern, 3)) {
+          // x:p:v - the named pattern x:p is read as the expression Pattern[x, p]; the pattern
+          // object is made here
+          IExpr named =
+              evalSetAttributesRecursive((IAST) ast.arg1(), noEvaluation, evalNumericFunction,
+                  level + 1);
+          if (named.isPresent() && named != ast.arg1()) {
+            ast = ast.setAtCopy(1, named);
+          }
+        }
         // a pattern construct with a wrong number of arguments stays as it is
         return ((IBuiltInSymbol) ast.head()).getEvaluator().evaluate(ast, this).orElse(ast);
       }

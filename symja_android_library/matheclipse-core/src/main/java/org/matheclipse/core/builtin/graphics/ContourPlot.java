@@ -177,12 +177,14 @@ public class ContourPlot extends ListPlot {
       functionArg = F.List(split.toArray(new IExpr[0]));
     }
 
+    boolean shaded = false;
     if (functionArg.isList()) {
       // Multiple functions/equations
       IAST list = (IAST) functionArg;
       int count = 0;
       for (int i = 1; i < list.size(); i++) {
         IExpr func = list.get(i);
+        shaded |= isShaded(func, contourShading);
 
         // Determine style for this specific curve
         IExpr style = contourStyle;
@@ -200,6 +202,7 @@ public class ContourPlot extends ListPlot {
       }
     } else {
       // Single function/equation
+      shaded = isShaded(functionArg, contourShading);
       generateContours(primitives, functionArg, xRange, yRange, xVar, yVar, plotPoints,
           numberOfContours, contourStyle, contourShading, colorFunctionScaling, colorFunctionOpt,
           engine, false, contourLines, contourLabels, region, boundaryStyle);
@@ -212,7 +215,26 @@ public class ContourPlot extends ListPlot {
     IAST content = F.List(graphicsComplex(primitives, xRange, yRange),
         meshLines.isPresent() ? meshLines : F.CEmptyList);
 
-    return createGraphicsFunction(content, graphicsOptions, wrappedAST);
+    IExpr graphics = createGraphicsFunction(content, graphicsOptions, wrappedAST);
+    if (!shaded
+        && GraphicsOptions.optionValue(originalAST, S.PlotRange, S.Automatic).isAutomatic()) {
+      // only curves are drawn, which need not reach the edges of the box of x and y they were
+      // traced in; the box is still what the picture shows
+      graphics = withPlotRange(graphics, originalAST, F.List(F.num(xRange[0]), F.num(xRange[1])),
+          true, F.List(F.num(yRange[0]), F.num(yRange[1])), true);
+    }
+    return graphics;
+  }
+
+  /**
+   * Whether the bands between the contours of <code>function</code> are filled: an equation is
+   * not shaded unless <code>ContourShading</code> asks for it.
+   */
+  private static boolean isShaded(IExpr function, IExpr contourShading) {
+    if (function.isAST(S.Equal, 3) && contourShading == S.Automatic) {
+      return false;
+    }
+    return contourShading != S.None && !contourShading.isFalse();
   }
 
   /**
@@ -284,15 +306,12 @@ public class ContourPlot extends ListPlot {
       IExpr contourStyle, IExpr contourShading, boolean colorFunctionScaling,
       IExpr colorFunctionOpt, EvalEngine engine, boolean isMulti, boolean contourLines,
       boolean contourLabels, RegionFunctionFilter region, IExpr boundaryStyle) {
+    // an equation is not shaded unless the shading is specified
+    final boolean shaded = isShaded(function, contourShading);
     boolean isEquation = false;
     if (function.isAST(S.Equal, 3)) {
       isEquation = true;
       function = F.Subtract(function.first(), function.second());
-    }
-
-    // Default shading to None for equations unless specified
-    if (isEquation && contourShading == S.Automatic) {
-      contourShading = S.None;
     }
 
     // CPD-OFF contour and density plots sample their own grids
@@ -372,7 +391,7 @@ public class ContourPlot extends ListPlot {
         gridX, gridY);
 
     // 3. Shading (Polygons)
-    if (contourShading != S.None && !contourShading.isFalse()) {
+    if (shaded) {
       for (int k = -1; k < levels.length; k++) {
         double level = (k == -1) ? minZ - 1.0 : levels[k];
 

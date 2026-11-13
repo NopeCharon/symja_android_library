@@ -128,8 +128,6 @@ public class ConstantDefinitions {
       S.$SystemID.setEvaluator(new $SystemID());
       S.$UserDocumentsDirectory.setEvaluator(new $UserDocumentsDirectory());
 
-      S.RecordSeparators.setEvaluator(new RecordSeparators());
-      S.WordSeparators.setEvaluator(new WordSeparators());
 
       S.Catalan.setEvaluator(new Catalan());
       S.ComplexInfinity.setEvaluator(new ComplexInfinity());
@@ -1259,59 +1257,6 @@ public class ConstantDefinitions {
           ? "(64-bit)"
           : "(32-bit)";
       return "Symja " + version + " for " + $SystemID.systemID() + " " + bits;
-    }
-  }
-
-  private static class RecordSeparators extends AbstractSymbolEvaluator
-      implements ISetValueEvaluator {
-
-    @Override
-    public IExpr evaluate(final ISymbol symbol, EvalEngine engine) {
-      IExpr value = symbol.hasAssignedSymbolValue() ? symbol.assignedValue() : null;
-      if (value != null) {
-        return value;
-      }
-
-      return F.NIL;
-    }
-
-    @Override
-    public IExpr evaluateSet(IExpr rightHandSide, boolean setDelayed, final EvalEngine engine) {
-      S.RecordSeparators.assignValue(rightHandSide, setDelayed);
-      return rightHandSide;
-    }
-
-    @Override
-    public void setUp(ISymbol newSymbol) {
-      super.setUp(newSymbol);
-      S.RecordSeparators.assignValue(F.list(F.stringx("\n"), F.stringx("\r\n"), F.stringx("\r")),
-          false);
-    }
-  }
-
-  private static class WordSeparators extends AbstractSymbolEvaluator
-      implements ISetValueEvaluator {
-
-    @Override
-    public IExpr evaluate(final ISymbol symbol, EvalEngine engine) {
-      IExpr value = symbol.hasAssignedSymbolValue() ? symbol.assignedValue() : null;
-      if (value != null) {
-        return value;
-      }
-
-      return F.NIL;
-    }
-
-    @Override
-    public IExpr evaluateSet(IExpr rightHandSide, boolean setDelayed, final EvalEngine engine) {
-      S.WordSeparators.assignValue(rightHandSide, setDelayed);
-      return rightHandSide;
-    }
-
-    @Override
-    public void setUp(ISymbol newSymbol) {
-      super.setUp(newSymbol);
-      S.WordSeparators.assignValue(F.list(F.stringx(" "), F.stringx("\t")), false);
     }
   }
 

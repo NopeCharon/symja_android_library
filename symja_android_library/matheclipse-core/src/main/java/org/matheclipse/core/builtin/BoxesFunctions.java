@@ -300,6 +300,15 @@ public class BoxesFunctions {
             if (traditional.isPresent()) {
               return traditional;
             }
+            if (function.isAST(S.Mod, 3)) {
+              // the template of the notation m mod n, with a sum or a product as operand in
+              // parentheses
+              return F.binaryAST2(S.TemplateBox,
+                  F.list(
+                      standardFormRecursive(function.arg1(), Precedence.TIMES + 1, form, engine),
+                      standardFormRecursive(function.arg2(), Precedence.TIMES + 1, form, engine)),
+                  F.$str("Mod"));
+            }
           }
           if (function.isNot() && function.argSize() == 1) {
             return parenthesizeRow(

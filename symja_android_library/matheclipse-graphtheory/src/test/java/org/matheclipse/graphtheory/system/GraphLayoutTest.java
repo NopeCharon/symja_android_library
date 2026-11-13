@@ -258,4 +258,27 @@ public class GraphLayoutTest extends AbstractTestCase {
         + order, //
         "{1,3,2,4}");
   }
+
+  @Test
+  public void testLayerSizeFunction() {
+    // the ring of depth k lies f(k) beyond the ring before it; the edges have a root mean square
+    // length of 1: the edges 2, 4 and 8 times Sqrt(3/84) long
+    check("Round(GraphEmbedding(Graph({a -> b, b -> c, c -> d}, GraphLayout -> "
+        + "{\"RadialEmbedding\", \"RootVertex\" -> a, \"LayerSizeFunction\" -> (2^# &)})), 0.001)", //
+        "{{0.0,2.646},{0.0,2.268},{0.0,1.512},{0.0,0.0}}");
+    // a value which is no number leaves the layer one unit deep
+    check("Round(GraphEmbedding(Graph({a -> b, b -> c}, GraphLayout -> "
+        + "{\"RadialEmbedding\", \"RootVertex\" -> a, \"LayerSizeFunction\" -> (w &)})), 0.001)", //
+        "{{0.0,2.0},{0.0,1.0},{0.0,0.0}}");
+    // the layered drawing of a digraph takes no layer sizes
+    check("GraphEmbedding(Graph({a -> b, b -> c}, GraphLayout -> "
+        + "{\"LayeredDigraphEmbedding\", \"LayerSizeFunction\" -> (3/# &)}))", //
+        "GraphEmbedding(Graph({a,b,c},{a->b,b->c}))");
+    check("Check(GraphEmbedding(Graph({a -> b}, GraphLayout -> "
+        + "{\"LayeredDigraphEmbedding\", \"Spacing\" -> 2})), failed, Graph::moptx)", //
+        "failed");
+    check("GraphEmbedding(Graph({a -> b, b -> c}, GraphLayout -> "
+        + "{\"LayeredDigraphEmbedding\", \"RootVertex\" -> a, \"Orientation\" -> Left}))", //
+        "{{0.0,0.0},{1.0,0.0},{2.0,0.0}}");
+  }
 }

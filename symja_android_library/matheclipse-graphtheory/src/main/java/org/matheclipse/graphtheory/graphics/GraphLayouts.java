@@ -31,12 +31,18 @@ import org.matheclipse.core.interfaces.IExpr;
  * <li><code>"LayeredEmbedding"</code>, <code>"LayeredDigraphEmbedding"</code> with the sub-options
  * <code>"RootVertex"</code> and <code>"Orientation"</code>.</li>
  * </ul>
+ * The radial layout takes the sub-option <code>"LayerSizeFunction" -&gt; f</code>: the circle of
+ * depth <code>k</code> lies <code>f(k)</code> beyond the one of depth <code>k - 1</code> instead of
+ * one unit.
  * A specification <code>{"VertexLayout" -&gt; spec, ...}</code> is the layout <code>spec</code>.
  */
 public final class GraphLayouts {
 
   /** <code>1/GoldenRatio</code>, the height of a layered drawing relative to its width */
   private static final double INV_GOLDEN = 0.6180339887498949;
+
+  /** The sub-option of the radial layout which gives the depth of a layer. */
+  public static final String LAYER_SIZE_FUNCTION = "LayerSizeFunction";
 
   /** The largest graph drawn as a tidy tree or in layers; larger ones go on a circle. */
   private static final int MAX_LAYERED_VERTICES = 5000;
@@ -153,7 +159,8 @@ public final class GraphLayouts {
         return n < 2 ? automatic() : spiral();
       case "RadialEmbedding": {
         IExpr root = subOption(spec, "RootVertex");
-        return radial(root.isPresent() && index.containsKey(root) ? index.get(root) : center());
+        return radial(root.isPresent() && index.containsKey(root) ? index.get(root) : center(),
+            subOption(spec, LAYER_SIZE_FUNCTION));
       }
       default:
         return null;
@@ -188,6 +195,33 @@ public final class GraphLayouts {
       }
     }
     return F.NIL;
+  }
+
+  /**
+   * How far from the roots the layers of a layered or radial drawing lie: the layer <code>k</code>,
+   * the step from depth <code>k - 1</code> to depth <code>k</code>, is
+   * <code>layerSizeFunction(k)</code> deep. Without a function, and where its value is no
+   * non-negative number, a layer is one unit deep.
+   *
+   * @param layerSizeFunction the function or {@link F#NIL}
+   * @param deepest the largest depth
+   * @return the offsets of the depths <code>0..deepest</code>
+   */
+  public static double[] layerOffsets(IExpr layerSizeFunction, int deepest) {
+    double[] offsets = new double[Math.max(deepest, 0) + 1];
+    EvalEngine engine = EvalEngine.get();
+    for (int k = 1; k < offsets.length; k++) {
+      double size = 1.0;
+      if (layerSizeFunction.isPresent()) {
+        engine.checkTimeLimit();
+        double value = engine.evaluate(F.unaryAST1(layerSizeFunction, F.ZZ(k))).evalfNaN();
+        if (Double.isFinite(value) && value >= 0.0) {
+          size = value;
+        }
+      }
+      offsets[k] = offsets[k - 1] + size;
+    }
+    return offsets;
   }
 
   /**
@@ -1102,9 +1136,12 @@ public final class GraphLayouts {
   /**
    * The breadth first tree from <code>root</code> on concentric circles, depth <code>d</code> on
    * the circle of radius <code>d</code>; every leaf gets an equal share of the full turn, the first
-   * one just past the top, and an inner vertex sits in the middle of the share of its leaves.
+   * one just past the top, and an inner vertex sits in the middle of the share of its leaves. With
+   * a <code>layerSizeFunction</code> the circle of depth <code>d</code> lies
+   * <code>layerSizeFunction(d)</code> beyond the one before it. The drawing is scaled to a root
+   * mean square edge length of 1.
    */
-  private double[][] radial(int root) {
+  private double[][] radial(int root, IExpr layerSizeFunction) {
     int[] depth = new int[n];
     Arrays.fill(depth, -1);
     int[] order = new int[n];
@@ -1152,6 +1189,11 @@ public final class GraphLayouts {
       }
     }
     double total = Math.max(leaves, 1);
+    int deepest = 0;
+    for (int d : depth) {
+      deepest = Math.max(deepest, d);
+    }
+    double[] radius = layerOffsets(layerSizeFunction, deepest);
     double[][] points = new double[n][2];
     for (int v = 0; v < n; v++) {
       if (depth[v] <= 0) {
@@ -1159,10 +1201,19 @@ public final class GraphLayouts {
       }
       double mid = (first[v] + last[v]) / 2.0;
       double angle = Math.PI / 2.0 + 2.0 * Math.PI * mid / total;
-      points[v][0] = depth[v] * Math.cos(angle);
-      points[v][1] = depth[v] * Math.sin(angle);
+      points[v][0] = radius[depth[v]] * Math.cos(angle);
+      points[v][1] = radius[depth[v]] * Math.sin(angle);
     }
-    return unitMeanEdge(points);
+    return unitRootMeanSquareEdge(points);
+  }
+
+  /**
+   * The first vertex of the smallest eccentricity of a graph with at least one vertex, the edges
+   * taken as undirected.
+   */
+  public static IExpr center(Graph<IExpr, ?> graph) {
+    GraphLayouts layouts = new GraphLayouts(graph);
+    return layouts.vertices.get(layouts.center());
   }
 
   /** The first vertex of the smallest eccentricity, the edges taken as undirected. */
@@ -1214,6 +1265,68 @@ public final class GraphLayouts {
       }
     }
     return points;
+  }
+
+  /** The points scaled to a root mean square edge length of 1 and moved to the origin. */
+  private double[][] unitRootMeanSquareEdge(double[][] points) {
+    double sum = 0.0;
+    int count = 0;
+    for (int[] e : edges) {
+      double dx = points[e[0]][0] - points[e[1]][0];
+      double dy = points[e[0]][1] - points[e[1]][1];
+      double squared = dx * dx + dy * dy;
+      if (squared > 0.0) {
+        sum += squared;
+        count++;
+      }
+    }
+    if (count > 0) {
+      double rms = Math.sqrt(sum / count);
+      for (double[] p : points) {
+        p[0] /= rms;
+        p[1] /= rms;
+      }
+    }
+    return shiftToOrigin(points);
+  }
+
+  /**
+   * The suboptions <code>"LayeredDigraphEmbedding"</code> takes. A specification with another one
+   * is reported with the message <code>Graph::moptx</code>.
+   */
+  private static final String[] LAYERED_DIGRAPH_SUBOPTIONS = {"Tolerance", "Rotation",
+      "Orientation", "RootVertex", "VertexLayerPosition", "VertexSizes"};
+
+  /**
+   * Whether every suboption of a layout specification is one its layout takes; prints the message
+   * <code>Graph::moptx</code> for the first one which is not.
+   *
+   * @param layout the value of <code>GraphLayout</code>
+   */
+  public static boolean validSuboptions(IExpr layout, EvalEngine engine) {
+    IExpr spec = vertexLayout(layout);
+    if (!layoutName(spec).equals("LayeredDigraphEmbedding") || !spec.isList()) {
+      return true;
+    }
+    for (IExpr option : (IAST) spec) {
+      if (!option.isRuleAST()) {
+        continue;
+      }
+      IExpr key = option.first();
+      String name = key.isString() ? key.toString()
+          : key.isSymbol() ? ((org.matheclipse.core.interfaces.ISymbol) key).getSymbolName() : "";
+      if (!java.util.Arrays.asList(LAYERED_DIGRAPH_SUBOPTIONS).contains(name)) {
+        IASTAppendable known = F.ListAlloc(LAYERED_DIGRAPH_SUBOPTIONS.length);
+        for (String suboption : LAYERED_DIGRAPH_SUBOPTIONS) {
+          known.append(F.stringx(suboption));
+        }
+        // Method option `1` in `2` is not one of `3`.
+        org.matheclipse.core.eval.Errors.printMessage(S.Graph, "moptx",
+            F.list(F.stringx(name), F.stringx("LayeredDigraphDrawing"), known), engine);
+        return false;
+      }
+    }
+    return true;
   }
 
   /** The points scaled to edges of mean length 1 and moved to the origin. */
