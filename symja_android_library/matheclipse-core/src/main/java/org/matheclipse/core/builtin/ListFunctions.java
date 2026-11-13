@@ -672,6 +672,14 @@ public final class ListFunctions {
    * {1,3,6}
    * </pre>
    */
+  /**
+   * A number, symbol or string: an atom without parts, unlike a sparse or numeric array, which
+   * stands for a list.
+   */
+  private static boolean isPlainAtom(IExpr x) {
+    return x.isNumber() || x.isSymbol() || x.isString();
+  }
+
   private static final class Accumulate extends AbstractEvaluator {
 
     @Override
@@ -689,6 +697,10 @@ public final class ListFunctions {
         // of a long list exceeds the recursion limit
         return foldLeft(null, list, 1, size,
             (x, y) -> engine.evaluate(F.binaryAST2(S.Plus, x, y)), resultList);
+      }
+      if (isPlainAtom(arg1)) {
+        // Nonatomic expression expected at position `1` in `2`.
+        return Errors.printMessage(S.Accumulate, "normal", F.List(F.C1, ast), engine);
       }
       return F.NIL;
     }
@@ -2855,6 +2867,10 @@ public final class ListFunctions {
     @Override
     public IExpr evaluate(IAST ast, EvalEngine engine) {
       final IExpr arg1 = engine.evaluate(ast.arg1());
+      if (isPlainAtom(arg1)) {
+        // an atom has no parts to delete
+        return arg1;
+      }
       if (arg1.isASTOrAssociation()) {
         final IPatternMatcher matcher = engine.evalPatternMatcher(ast.arg2());
         boolean includeHeads = false;
@@ -7920,6 +7936,10 @@ public final class ListFunctions {
             return list.select(x -> engine.evalTrue(predicateHead, x), maxNumberOfResults);
           }
         }
+        if (isPlainAtom(ast.arg1())) {
+          // Nonatomic expression expected at position `1` in `2`.
+          return Errors.printMessage(S.Select, "normal", F.List(F.C1, ast), engine);
+        }
       } catch (IllegalArgumentException iae) {
         return Errors.printMessage(S.Select, iae, engine);
       }
@@ -9475,6 +9495,10 @@ public final class ListFunctions {
       }
 
       IExpr arg1 = ast.arg1();
+      if (isPlainAtom(arg1)) {
+        // the total of an atom is the atom
+        return arg1;
+      }
       if (arg1.isNumericArray()) {
         // the sums are ordinary numbers and lists
         return NumericArrayExpr.evalNormal(ast, false, engine);

@@ -877,6 +877,13 @@ public class Integrate extends AbstractFunctionOptionEvaluator {
           }
           // An antiderivative was found but would not evaluate at the limits. That is not a region
           // problem, so it stays unevaluated, as it did before there was anything to try here.
+          if (forcedMethod == null && !assumptionExpr.isAST()) {
+            // the value for real parameters
+            IExpr conditional = withRealParameters(arg1, xList, engine);
+            if (conditional.isPresent()) {
+              return conditional;
+            }
+          }
           return antiderivative ? F.NIL : integrateBooleTimesFxRegion(arg1, xList, false, engine);
         }
         // Invalid integration variable or limit(s) in `1`.
@@ -1136,7 +1143,11 @@ public class Integrate extends AbstractFunctionOptionEvaluator {
           // E^(I*k*x)*Sec(a*x) divides by a - k, which is zero when the two frequencies agree, and
           // answered ComplexInfinity. Leave it to the stages below, which write the exponential as
           // Cos and Sin.
-          if (!rubiResult.equals(ast) && !unfinishedSubstitution
+          // a constant isn't the antiderivative of an integrand with x in it: an Indeterminate
+          // inside a rule's substitution was dropped to 0
+          boolean constantAnswer = rubiResult.isFree(x, true) && !fx.isFree(x, true)
+              && !engine.evalTrue(F.PossibleZeroQ(fx));
+          if (!rubiResult.equals(ast) && !unfinishedSubstitution && !constantAnswer
               && isFiniteAntiderivative(rubiResult)) {
             if (!rubiResult.isFree(S.Integrate, true)) {
               // the rules integrated a sum term by term and left terms which are not elementary on
@@ -2813,6 +2824,74 @@ public class Integrate extends AbstractFunctionOptionEvaluator {
     return new IExpr[] {root, value, slope};
   }
 
+  /** The largest number of parameters {@link #withRealParameters} assumes to be real. */
+  private static final int MAX_REAL_PARAMETERS = 3;
+
+  /** The time budget of the integral with real parameters in {@link #withRealParameters}. */
+  private static final long REAL_PARAMETERS_MILLIS = 4_000L;
+
+  /**
+   * <code>Integrate(f, {x, a, b})</code> without assumptions, whose integrand has parameters: the
+   * integral with the parameters assumed real, as a <code>ConditionalExpression</code>.
+   * <code>Cos(c*x)/(x^2+1)</code> on the real line converges for every real <code>c</code> only.
+   *
+   * @return {@link F#NIL} if there are no parameters or no value for real ones
+   */
+  private static IExpr withRealParameters(IExpr integrand, IAST xList, EvalEngine engine) {
+    if (engine.getAssumptions() != null) {
+      return F.NIL;
+    }
+    IAST parameters = integrandParameters(integrand, xList.arg1());
+    if (parameters.argSize() == 0 || parameters.argSize() > MAX_REAL_PARAMETERS
+        || parameters.exists(p -> !xList.arg2().isFree(p, true) || !xList.arg3().isFree(p, true))) {
+      return F.NIL;
+    }
+    IExpr condition = parameters.argSize() == 1 ? F.Element(parameters.arg1(), S.Reals)
+        : F.Element(parameters, S.Reals);
+    final IExpr realIntegral = F.Integrate(integrand, xList, F.Rule(S.Assumptions, condition));
+    IExpr value = IntegrateTimeBudget.runWithin(() -> engine.evalQuiet(realIntegral),
+        MachineProfile.millis(REAL_PARAMETERS_MILLIS));
+    if (value.isPresent() && value.isFreeAST(S.Integrate) && value.isSpecialsFree()
+        && !value.isIndeterminate()) {
+      if (value.isConditionalExpression()) {
+        // one condition: both have to hold
+        return engine.evaluate(
+            F.ConditionalExpression(value.first(), F.And(condition, value.second())));
+      }
+      return F.ConditionalExpression(value, condition);
+    }
+    return F.NIL;
+  }
+
+  /** The symbols of <code>integrand</code> other than <code>x</code> and the constants. */
+  private static IAST integrandParameters(IExpr integrand, IExpr x) {
+    IAST variables = new VariablesSet(integrand).getVarList();
+    IASTAppendable parameters = F.ListAlloc(variables.argSize());
+    for (IExpr v : variables) {
+      if (!v.equals(x)) {
+        parameters.append(v);
+      }
+    }
+    return parameters;
+  }
+
+  /**
+   * The integral doesn't converge: the message <code>Integrate::idiv</code>, unless the limit of the
+   * antiderivative which said so has a parameter of the integrand in it and there are no
+   * assumptions: its values may decide the convergence.
+   *
+   * @param limit the value of the antiderivative at the bound which isn't finite
+   */
+  private static IExpr divergence(IAST originalAST, IExpr limit, IExpr x, EvalEngine engine) {
+    if (engine.getAssumptions() == null && integrandParameters(originalAST.arg1(), x)
+        .exists(p -> !limit.isFree(p, true))) {
+      return F.NIL;
+    }
+    // Integral of `1` does not converge on `2`.
+    return Errors.printMessage(S.Integrate, "idiv",
+        F.List(originalAST.arg1(), originalAST.arg2()), engine);
+  }
+
   /**
    * Given a continuous <code>function</code> of a real variable <code>x</code> and an interval
    * <code>[lower, upper]</code> of the real line, calculate the definite integral
@@ -2943,9 +3022,7 @@ public class Integrate extends AbstractFunctionOptionEvaluator {
       return F.NIL;
     }
     if (!lowerLimit.isSpecialsFree() || lowerLimit.isInterval() || lowerLimit.isIntervalData()) {
-      // Integral of `1` does not converge on `2`.
-      return Errors.printMessage(S.Integrate, "idiv",
-          F.List(originalAST.arg1(), originalAST.arg2()), engine);
+      return divergence(originalAST, lowerLimit, x, engine);
     }
     if (!lowerLimit.isFreeAST(S.Limit)) {
       // the limit stayed unevaluated - neither convergence nor divergence can be decided, so
@@ -2961,9 +3038,7 @@ public class Integrate extends AbstractFunctionOptionEvaluator {
       return F.NIL;
     }
     if (!upperLimit.isSpecialsFree() || upperLimit.isInterval() || upperLimit.isIntervalData()) {
-      // Integral of `1` does not converge on `2`.
-      return Errors.printMessage(S.Integrate, "idiv",
-          F.List(originalAST.arg1(), originalAST.arg2()), engine);
+      return divergence(originalAST, upperLimit, x, engine);
     }
     if (!upperLimit.isFreeAST(S.Limit)) {
       return F.NIL;
@@ -3201,8 +3276,10 @@ public class Integrate extends AbstractFunctionOptionEvaluator {
   /**
    * The sum of the jumps <code>F(p+0) - F(p-0)</code> of the antiderivative <code>F</code> at the
    * points <code>lower &lt; p &lt; upper</code> where the complex argument <code>u</code> of a
-   * <code>Log(u)</code> or <code>ExpIntegralEi(u)</code> crosses the negative real axis: both jump
-   * by <code>2*Pi*I</code> from below to above the cut. A bound on the cut is no jump: the
+   * <code>Log(u)</code>, <code>ExpIntegralEi(u)</code> or <code>u^q</code> with a non-integer real
+   * <code>q</code> crosses the negative real axis: the first two jump by <code>2*Pi*I</code> from
+   * below to above the cut, the power by <code>(-u)^q*2*I*Sin(Pi*q)</code>. A bound on the cut is
+   * no jump: the
    * one-sided limit there gives the value on the side of the interval. <code>F</code> has to be
    * linear in that
    * function; <code>E^(I*x)/(1+x^2)</code> has <code>E*ExpIntegralEi(-1+I*x)*I/2</code>, which
@@ -3220,6 +3297,10 @@ public class Integrate extends AbstractFunctionOptionEvaluator {
       if ((e.isLog() || e.isAST(S.ExpIntegralEi, 2)) && !e.first().isFree(x)
           && e.first().isPolynomial(F.list(x)) && hasComplexNumber(e.first())) {
         cutFunctions.add(e);
+      } else if (e.isPower() && e.exponent().isReal() && !e.exponent().isInteger()
+          && !e.base().isFree(x) && e.base().isPolynomial(F.list(x))
+          && hasComplexNumber(e.base())) {
+        cutFunctions.add(e);
       }
       return false;
     }, true);
@@ -3229,7 +3310,7 @@ public class Integrate extends AbstractFunctionOptionEvaluator {
     try {
       IASTAppendable sum = F.PlusAlloc(4);
       for (IExpr cutFunction : cutFunctions) {
-        IExpr u = cutFunction.first();
+        IExpr u = cutFunction.isPower() ? cutFunction.base() : cutFunction.first();
         IExpr im = engine.evaluate(F.ComplexExpand(F.Im(u)));
         IExpr re = engine.evaluate(F.ComplexExpand(F.Re(u)));
         if (im.isZero() || !im.isPolynomial(F.list(x)) || !re.isPolynomial(F.list(x))) {
@@ -3281,7 +3362,14 @@ public class Integrate extends AbstractFunctionOptionEvaluator {
             // cut
             continue;
           }
-          sum.append(F.Times(F.ZZ(direction), F.C2, S.Pi, F.CI, coefficientAtP));
+          if (cutFunction.isPower()) {
+            // (-u)^q*(E^(I*Pi*q)-E^(-I*Pi*q)) from below to above the cut
+            IExpr q = cutFunction.exponent();
+            sum.append(F.Times(F.ZZ(direction), F.C2, F.CI, F.Sin(F.Times(S.Pi, q)),
+                F.Power(F.Negate(reAtP), q), coefficientAtP));
+          } else {
+            sum.append(F.Times(F.ZZ(direction), F.C2, S.Pi, F.CI, coefficientAtP));
+          }
         }
       }
       return sum.argSize() == 0 ? F.NIL : engine.evaluate(sum);
