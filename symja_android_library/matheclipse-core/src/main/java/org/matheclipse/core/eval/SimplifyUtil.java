@@ -1872,7 +1872,8 @@ public class SimplifyUtil extends VisitorExpr {
             }
           }
         } else {
-          temp = F.Times(numberFactors, exprFactors, newTimes);
+          // the number factors follow after the expansion, once
+          temp = F.Times(exprFactors, newTimes);
         }
         temp = eval(F.Expand(temp));
         temp = numberFactors.times(temp);

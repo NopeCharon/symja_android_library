@@ -2112,6 +2112,36 @@ public class EvalEngine implements Serializable {
   }
 
   /**
+   * The precision with which a numeric function of numbers is evaluated outside an arbitrary
+   * precision evaluation: the lowest one of its arguments of a precision of their own, if all its
+   * arguments are numbers and none is a machine number. Without it a function of several
+   * arguments takes the machine precision of the engine: <code>EllipticF(a, m)</code> of two
+   * 30-digit numbers gave a machine number. The arithmetic of <code>Plus, Times, Power</code> keeps
+   * the precision of its operands by itself.
+   *
+   * @return <code>0</code> if the precision of the engine stays
+   */
+  private long numericArgumentPrecision(final ISymbol symbol, final IAST ast) {
+    if (isArbitraryMode() || ast.argSize() < 1 || symbol == S.Plus || symbol == S.Times
+        || symbol == S.Power) {
+      return 0L;
+    }
+    long precision = Long.MAX_VALUE;
+    for (int i = 1; i < ast.size(); i++) {
+      final IExpr arg = ast.get(i);
+      if (hasOwnPrecision(arg)) {
+        precision = Math.min(precision, arg.determinePrecision(false));
+      } else if (!arg.isNumber() || arg.isInexactNumber()) {
+        // a symbolic argument, or a machine number which decides the precision of the value
+        return 0L;
+      }
+    }
+    // a tracked precision below the machine one is no arbitrary precision of the engine
+    return precision == Long.MAX_VALUE || precision <= ParserConfig.MACHINE_PRECISION ? 0L
+        : precision;
+  }
+
+  /**
    * Test if <code>number</code> brings a precision of its own: a tracked one, or more digits than
    * machine precision. An exact value in an apfloat (a zero of infinite precision, which a solver
    * may return) has none - taken as the precision of the evaluation it would ask for infinitely
@@ -2476,19 +2506,33 @@ public class EvalEngine implements Serializable {
           } else {
             // a numeric function without condition numbers: the precision of its arguments
             final double opaquePrecision = SignificanceArithmetic.opaquePrecision(symbol, newAST);
+            // numbers of a precision of their own: the function works with their digits
+            final long argumentPrecision = Attribute.NUMERICFUNCTION.isSetIn(attributes)
+                ? numericArgumentPrecision(symbol, newAST)
+                : 0L;
+            final long oldPrecision = getNumericPrecision();
+            if (argumentPrecision > 0L) {
+              setNumericPrecision(argumentPrecision);
+            }
             IExpr result;
-            if (Double.isNaN(opaquePrecision)) {
-              result = fNumericMode ? functionEvaluator.numericEval(newAST, this)
-                  : functionEvaluator.evaluate(newAST, this);
-            } else {
-              fSignificanceSuspended++;
-              try {
+            try {
+              if (Double.isNaN(opaquePrecision)) {
                 result = fNumericMode ? functionEvaluator.numericEval(newAST, this)
                     : functionEvaluator.evaluate(newAST, this);
-              } finally {
-                fSignificanceSuspended--;
+              } else {
+                fSignificanceSuspended++;
+                try {
+                  result = fNumericMode ? functionEvaluator.numericEval(newAST, this)
+                      : functionEvaluator.evaluate(newAST, this);
+                } finally {
+                  fSignificanceSuspended--;
+                }
+                result = SignificanceArithmetic.withPrecision(result, opaquePrecision);
               }
-              result = SignificanceArithmetic.withPrecision(result, opaquePrecision);
+            } finally {
+              if (argumentPrecision > 0L) {
+                setNumericPrecision(oldPrecision);
+              }
             }
             if (result.isPresent()) {
               // the precision of the value from the precision of the arguments

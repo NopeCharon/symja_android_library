@@ -891,8 +891,10 @@ public class Sum extends ListFunctions.Table implements SumRules {
     }
     final IExpr upper = to;
     // the closed form with a symbolic upper bound first: it is telescoping where it can be,
-    // 1/(k*(k+1)) sums to 1-1/(n+1); a short budget, since it gives up slowly on a cubic
-    IExpr closed = TimeLimits.call(engine, () -> {
+    // 1/(k*(k+1)) sums to 1-1/(n+1); a short budget, since it gives up slowly on a cubic. The
+    // value at the bound may be an exact fraction beyond the size limit of the numbers: the
+    // partial fractions follow then
+    IExpr closed = TimeLimits.callOrNil(engine, () -> {
       ISymbol n = F.Dummy("n");
       IExpr symbolic = engine.evalQuiet(F.Sum(summand, F.List(k, from, n)));
       if (symbolic.isPresent() && symbolic.isFreeAST(S.Sum) && symbolic.isFreeAST(S.DifferenceRoot)
@@ -900,14 +902,13 @@ public class Sum extends ListFunctions.Table implements SumRules {
         return engine.evaluate(F.subst(symbolic, n, upper));
       }
       return F.NIL;
-    }, org.matheclipse.core.basic.MachineProfile.millis(SYMBOLIC_BOUND_MILLIS), () -> F.NIL);
-    if (closed != null && closed.isPresent()) {
+    }, org.matheclipse.core.basic.MachineProfile.millis(SYMBOLIC_BOUND_MILLIS));
+    if (closed.isPresent()) {
       return closed;
     }
-    closed = TimeLimits.call(engine,
+    return TimeLimits.callOrNil(engine,
         () -> partialFractionRangeSum(summand, k, (IInteger) from, (IInteger) upper, engine),
-        org.matheclipse.core.basic.MachineProfile.millis(LONG_RANGE_MILLIS), () -> F.NIL);
-    return closed == null ? F.NIL : closed;
+        org.matheclipse.core.basic.MachineProfile.millis(LONG_RANGE_MILLIS));
   }
 
   /** The time budget of the sum with a symbolic upper bound in {@link #longRationalRangeSum}. */

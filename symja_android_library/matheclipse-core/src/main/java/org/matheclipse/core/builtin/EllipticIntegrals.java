@@ -679,7 +679,7 @@ public class EllipticIntegrals {
                 Errors.rethrowsInterruptException(ex);
               }
             }
-            return F.complexNum(EllipticIntegralsJS.ellipticE(zDouble, mDouble));
+            return machineValue(EllipticIntegralsJS.ellipticE(zDouble, mDouble));
           }
         } catch (ValidateException ve) {
           throw ve;
@@ -890,7 +890,7 @@ public class EllipticIntegrals {
             }
             return F.complexNum(ellipticF);
           } else {
-            return F.complexNum(EllipticIntegralsJS.ellipticF(zDouble, mDouble));
+            return machineValue(EllipticIntegralsJS.ellipticF(zDouble, mDouble));
           }
         } catch (ValidateException ve) {
           throw ve;
@@ -1547,7 +1547,7 @@ public class EllipticIntegrals {
             if (ellipticPi.isInfinite()) {
               return F.CComplexInfinity;
             }
-            return ellipticPiPrincipalValue(F.complexNum(ellipticPi), n, z, m, engine);
+            return ellipticPiPrincipalValue(machineValue(ellipticPi), n, z, m, engine);
           }
         } catch (ValidateException ve) {
           throw ve;
@@ -2329,6 +2329,14 @@ public class EllipticIntegrals {
       newSymbol.setAttributes(Attribute.LISTABLE, Attribute.NUMERICFUNCTION);
       super.setUp(newSymbol);
     }
+  }
+
+  /**
+   * The machine number of an integral of real machine numbers: real if the imaginary part is
+   * zero, so that <code>EllipticF(0.33, 0.2)</code> has no <code>0.0*I</code>.
+   */
+  private static IExpr machineValue(Complex value) {
+    return value.getImaginary() == 0.0 ? F.num(value.getReal()) : F.complexNum(value);
   }
 
   /** Whether two numbers are evaluated numerically: one is inexact or the engine is numeric. */

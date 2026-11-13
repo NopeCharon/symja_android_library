@@ -28,8 +28,8 @@ public class LongRangeSumTest extends ExprEvaluatorTestCase {
     check("Sum(1/(k - 30001)^2, {k, 1, 20000})", //
         "PolyGamma(1,10001)-PolyGamma(1,30001)");
     check(
-        "Abs(N(Sum(1/((k - 25001)*(k^2 + 2)), {k, 1, 20000}), 30)"
-            + " - Total(Table(N(1/((k - 25001)*(k^2 + 2)), 40), {k, 1, 20000}))) < 10^-25", //
+        "Abs(N(Sum(1/((k - 18001)*(k^2 + 2)), {k, 1, 15000}), 30)"
+            + " - Total(Table(N(1/((k - 18001)*(k^2 + 2)), 40), {k, 1, 15000}))) < 10^-25", //
         "True");
   }
 

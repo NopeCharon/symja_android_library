@@ -356,7 +356,7 @@ public class Integrate extends AbstractFunctionOptionEvaluator {
         // less useful than the unevaluated integral, so hand that back instead.
         return F.NIL;
       }
-      return result;
+      return distributeNumberFactors(result, engine);
     } finally {
       IN_RUBI_RULES.set(calledFromRubiRule);
       if (depth == 0) {
@@ -371,6 +371,38 @@ public class Integrate extends AbstractFunctionOptionEvaluator {
         EVAL_DEPTH.set(depth);
       }
     }
+  }
+
+  /**
+   * A sum whose terms <code>c*(u+v+...)</code> with a number <code>c</code> cancel against each
+   * other once <code>c</code> is distributed: the rules integrate the pieces of a sum separately,
+   * and <code>(2*s+L)/3+(-2*s-L)/3</code> came back from the derivative of
+   * <code>Log(x)*Sqrt(1+x^3)</code>.
+   *
+   * @return the distributed sum if it is smaller, <code>result</code> otherwise
+   */
+  private static IExpr distributeNumberFactors(IExpr result, EvalEngine engine) {
+    if (!result.isPlus() || !result.isFree(S.Integrate, true)) {
+      return result;
+    }
+    boolean distributed = false;
+    IASTAppendable sum = F.PlusAlloc(result.argSize() + 8);
+    for (IExpr term : (IAST) result) {
+      if (term.isTimes() && term.argSize() == 2 && term.first().isNumber()
+          && term.second().isPlus()) {
+        for (IExpr part : (IAST) term.second()) {
+          sum.append(F.Times(term.first(), part));
+        }
+        distributed = true;
+      } else {
+        sum.append(term);
+      }
+    }
+    if (!distributed) {
+      return result;
+    }
+    IExpr value = engine.evaluate(sum);
+    return value.leafCount() < result.leafCount() ? value : result;
   }
 
   /**
@@ -1107,21 +1139,27 @@ public class Integrate extends AbstractFunctionOptionEvaluator {
           if (!rubiResult.equals(ast) && !unfinishedSubstitution
               && isFiniteAntiderivative(rubiResult)) {
             if (!rubiResult.isFree(S.Integrate, true)) {
+              // the rules integrated a sum term by term and left terms which are not elementary on
+              // their own, like Log(x)/Sqrt(1+x^2) in the derivative of Log(x)*ArcSinh(x) or
+              // x*E^x/(1+E^x)^2 in the one of x*E^x/(1+E^x): the parallel integration takes the
+              // integrand as a whole - over Log and Exp alone first, its ansatz is small, while
+              // integrating each leftover again costs a budget per leftover
+              final boolean transcendental = RischNorman.isTranscendentalTower(fx, x);
+              if (transcendental) {
+                IExpr whole = parallelIntegrationOfWhole(fx, x, engine);
+                if (whole.isPresent()) {
+                  return whole;
+                }
+              }
               IExpr finished = finishPartialAnswer(rubiResult, fx, x, engine);
               if (finished.isPresent()) {
                 return finished;
               }
-            }
-            if (!rubiResult.isFree(S.Integrate, true) && RischNorman.isRadicalTower(fx, x)) {
-              // the rules integrated a sum term by term and left terms which are not elementary on
-              // their own, like Log(x)/Sqrt(1+x^2) in the derivative of Log(x)*ArcSinh(x): the
-              // radical tower stage takes the integrand as a whole
-              IExpr whole = quietStage(engine, fx, x, "parallel integration over a radical tower",
-                  () -> IntegrateTimeBudget.runWithin(() -> RischNorman.integrate(fx, x, engine),
-                      MachineProfile
-                          .millis(Config.INTEGRATE_RISCH_NORMAN_RADICAL_TIMELIMIT_MILLIS)));
-              if (whole.isPresent()) {
-                return whole;
+              if (!transcendental) {
+                IExpr whole = parallelIntegrationOfWhole(fx, x, engine);
+                if (whole.isPresent()) {
+                  return whole;
+                }
               }
             }
             return rubiResult;
@@ -1150,16 +1188,12 @@ public class Integrate extends AbstractFunctionOptionEvaluator {
           if (result.isPresent()) {
             return result;
           }
-          // Parallel integration over a tower with one radical in it, such as the derivative of
-          // Log(x)*Log(x+Sqrt(x^2+1)): a class the rules measurably leave unanswered. Only for a
-          // root together with Log, Exp or Tan, and verified by differentiation before it returns.
-          if (RischNorman.isRadicalTower(fx, x)) {
-            result = quietStage(engine, fx, x, "parallel integration over a radical tower",
-                () -> IntegrateTimeBudget.runWithin(() -> RischNorman.integrate(fx, x, engine),
-                    MachineProfile.millis(Config.INTEGRATE_RISCH_NORMAN_RADICAL_TIMELIMIT_MILLIS)));
-            if (result.isPresent()) {
-              return result;
-            }
+          // Parallel integration over a tower of Log, Exp or Tan kernels, with at most one radical
+          // in it, such as the derivative of Log(x)*Log(x+Sqrt(x^2+1)) or of
+          // Log(1+E^(2*x))+Log(1+x): a class the rules measurably leave unanswered.
+          result = parallelIntegrationOfWhole(fx, x, engine);
+          if (result.isPresent()) {
+            return result;
           }
           // A root over Sqrt(quadratic), like Sqrt(2*x^2+x*Sqrt(4*x^2+3)): an Euler substitution
           // rationalizes the conic and leaves a root the rules can integrate.
@@ -1372,6 +1406,33 @@ public class Integrate extends AbstractFunctionOptionEvaluator {
    */
   private static IExpr quietStage(final EvalEngine engine, final Supplier<IExpr> stage) {
     return engine.withQuietMode(stage);
+  }
+
+  /**
+   * Parallel integration of the integrand as a whole: over a tower with one radical in it (the
+   * larger budget) or over a tower of <code>Log, Exp, Tan</code> kernels alone, whose ansatz is
+   * smaller.
+   *
+   * @return {@link F#NIL} if the integrand is no such tower or the stage has no answer in time
+   */
+  private static IExpr parallelIntegrationOfWhole(final IExpr fx, final IExpr x,
+      final EvalEngine engine) {
+    final long millis;
+    final String step;
+    if (RischNorman.isRadicalTower(fx, x)) {
+      millis = Config.INTEGRATE_RISCH_NORMAN_RADICAL_TIMELIMIT_MILLIS;
+      step = "parallel integration over a radical tower";
+    } else if (EVAL_DEPTH.get() == 1 && RischNorman.isTranscendentalTower(fx, x)) {
+      // only for the integral the user asked for: the rules and the stages hand many pieces of
+      // it back to Integrate, and the ansatz of each would cost its budget once more
+      millis = 2L * Config.INTEGRATE_RISCH_NORMAN_TIMELIMIT_MILLIS;
+      step = "parallel integration over a tower of functions";
+    } else {
+      return F.NIL;
+    }
+    return quietStage(engine, fx, x, step,
+        () -> IntegrateTimeBudget.runWithin(() -> RischNorman.integrate(fx, x, engine),
+            MachineProfile.millis(millis)));
   }
 
   /**

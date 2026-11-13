@@ -5519,6 +5519,10 @@ public final class Arithmetic {
      * @return
      */
     private static IExpr powerTimesFraction(IAST baseTimes, final IFraction exponent) {
+      IAST positive = signIntoNegativeSum(baseTimes);
+      if (positive.isPresent()) {
+        return F.Power(positive.oneIdentity1(), exponent);
+      }
       IASTAppendable result = F.TimesAlloc(baseTimes.argSize());
       IASTAppendable rest = F.TimesAlloc(baseTimes.argSize());
       boolean evaled = false;
@@ -5650,6 +5654,47 @@ public final class Arithmetic {
         return result;
       }
       return F.NIL;
+    }
+
+    /**
+     * A numeric product with a negative rational factor and a sum of negative value, or the
+     * reciprocal of one: the sign goes into the sum, <code>-5/(-4+Sqrt(3))</code> is
+     * <code>5/(4-Sqrt(3))</code>, a product of positive factors. A root of it keeps the product
+     * as it is, while the negative rational factor would be split off as <code>Sqrt(5)</code> next
+     * to <code>Sqrt(-1/(-4+Sqrt(3)))</code>.
+     *
+     * @return {@link F#NIL} if the product isn't of this kind
+     */
+    private static IAST signIntoNegativeSum(IAST baseTimes) {
+      if (!baseTimes.isNumericFunction(true)) {
+        return F.NIL;
+      }
+      int rationalIndex = -1;
+      int sumIndex = -1;
+      for (int i = 1; i < baseTimes.size(); i++) {
+        IExpr arg = baseTimes.get(i);
+        if (rationalIndex < 0 && arg.isRational() && arg.isNegative()) {
+          rationalIndex = i;
+        } else if (sumIndex < 0 && (arg.isPlus()
+            || (arg.isPower() && arg.base().isPlus() && arg.exponent().isInteger()
+                && ((IInteger) arg.exponent()).isOdd()))) {
+          IExpr sum = arg.isPlus() ? arg : arg.base();
+          double value = sum.evalfNaN();
+          if (value < 0.0) {
+            sumIndex = i;
+          }
+        }
+      }
+      if (rationalIndex < 0 || sumIndex < 0) {
+        return F.NIL;
+      }
+      EvalEngine engine = EvalEngine.get();
+      IASTMutable result = baseTimes.copy();
+      result.set(rationalIndex, ((IRational) baseTimes.get(rationalIndex)).negate());
+      IExpr sumFactor = baseTimes.get(sumIndex);
+      result.set(sumIndex, sumFactor.isPlus() ? engine.evaluate(F.Negate(sumFactor))
+          : F.Power(engine.evaluate(F.Negate(sumFactor.base())), sumFactor.exponent()));
+      return result;
     }
 
     /**

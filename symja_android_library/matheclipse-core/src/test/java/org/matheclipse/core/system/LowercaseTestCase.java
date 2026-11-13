@@ -39965,7 +39965,7 @@ public class LowercaseTestCase extends ExprEvaluatorTestCase {
     // only a positive factor may be taken out of the root: with two negative factors the root of a
     // positive number must not come out negative
     check("Sqrt(-5*(2-Sqrt(5)))", //
-        "Sqrt(-10+5*Sqrt(5))");
+        "Sqrt(5*(-2+Sqrt(5)))");
     check("N(Sqrt(-5*(2-Sqrt(5))))", //
         "1.08643");
     check("Sqrt(-4*(2-Sqrt(5)))", //
