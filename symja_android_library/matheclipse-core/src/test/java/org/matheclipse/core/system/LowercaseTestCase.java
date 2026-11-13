@@ -43837,6 +43837,13 @@ public class LowercaseTestCase extends ExprEvaluatorTestCase {
     // Mathematica's pair: the quotient in the fundamental domain, on its edge Re(w3/w1) == 1/2 here
     check("Chop(WeierstrassHalfPeriods({1.0, 2.0 } ))", //
         "{1.30836,0.654182+I*1.22937}");
+    // real invariants: no part of rounding noise
+    check("WeierstrassHalfPeriods({1.0, 2.0})", //
+        "{1.30836,0.654182+I*1.22937}");
+    check("WeierstrassHalfPeriods({4.0, -1.0})", //
+        "{I*(-1.22569),1.49673}");
+    check("WeierstrassHalfPeriods({-3.0, 7.0})", //
+        "{0.58139+I*(-0.906154),0.58139+I*0.906154}");
     check("Table(WeierstrassHalfPeriods({1.0,x*I} ), {x,-2.0, 2.0, 1/4})", //
         "{{1.30139+I*0.299127,0.299127+I*1.30139},{1.32906+I*0.300747,0.300747+I*1.32906}," //
             + "{1.36146+I*0.301917,0.301917+I*1.36146},{1.40035+I*0.30217,0.30217+I*1.40035}," //
@@ -43849,7 +43856,7 @@ public class LowercaseTestCase extends ExprEvaluatorTestCase {
 
     // g2==0 was evaluated to Indeterminate before
     check("WeierstrassHalfPeriods({0.0,4.0})", //
-        "{1.21433+I*(-2.85195*10^-16),0.607163+I*1.05164}");
+        "{1.21433,0.607163+I*1.05164}");
 
     check("WeierstrassHalfPeriods({1.0, 2.0*I} )", //
         "{1.30139+I*(-0.299127),-0.299127+I*1.30139}");
@@ -43885,6 +43892,29 @@ public class LowercaseTestCase extends ExprEvaluatorTestCase {
         "4.03176+I*0.00111826");
     check("WeierstrassP(0.5+0.25*I, {2, 3})", //
         "1.9357+I*(-2.52494)");
+    // a complex number on the real axis, an exact argument and numeric constants
+    check("WeierstrassP(Complex(0.5,0.0), {2, 3})", //
+        "4.03176");
+    check("WeierstrassP(1/2, {2.0, 3.0})", //
+        "4.03176");
+    check("WeierstrassP(0.5, {2, Pi})", //
+        "4.03208");
+    check("N(WeierstrassP(1/2, {2, Pi}), 20)", //
+        "4.0320775344366049773");
+    // a negative discriminant
+    check("WeierstrassP(5.0, {-3, 7})", //
+        "8.20126");
+    // many periods from the origin: reduced with the periods to more digits
+    checkNumeric("WeierstrassP(200.0, {1, 3})", //
+        "1088.766786571086");
+    checkNumeric("WeierstrassP(20.0, {1, 3})", //
+        "16.81088326469807");
+    checkNumeric("WeierstrassPPrime(200.0, {1, 3})", //
+        "71850.90550923819");
+    checkNumeric("WeierstrassP(5000.5, {-3, 7})", //
+        "3.3427458476850687");
+    checkNumeric("WeierstrassP(300.0+7.0*I, {1, 2})", //
+        "0.06936241180082409+I*3.4404736725782903");
 
     // the equianharmonic invariants g2==0 were evaluated to Indeterminate before
     check("Chop(WeierstrassP(0.7,{0,4/27}))", //

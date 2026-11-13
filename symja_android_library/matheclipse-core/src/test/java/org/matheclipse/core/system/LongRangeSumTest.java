@@ -27,8 +27,9 @@ public class LongRangeSumTest extends ExprEvaluatorTestCase {
         "0");
     check("Sum(1/(k - 30001)^2, {k, 1, 20000})", //
         "PolyGamma(1,10001)-PolyGamma(1,30001)");
-    check("Abs(N(Sum(1/((k - 25001)*(k^2 + 2)), {k, 1, 20000}), 30)"
-        + " - Total(Table(N(1/((k - 25001)*(k^2 + 2)), 40), {k, 1, 20000}))) < 10^-25", //
+    check(
+        "Abs(N(Sum(1/((k - 25001)*(k^2 + 2)), {k, 1, 20000}), 30)"
+            + " - Total(Table(N(1/((k - 25001)*(k^2 + 2)), 40), {k, 1, 20000}))) < 10^-25", //
         "True");
   }
 
@@ -37,14 +38,17 @@ public class LongRangeSumTest extends ExprEvaluatorTestCase {
     check("FreeQ(Sum(1/(k^3 + 2*k + 3), {k, 1, 10^6}), Sum)", //
         "True");
     // the finite sum and the tail make the infinite sum
-    check("Abs(N(Sum(1/(k^3 + 2*k + 3), {k, 1, 30000}) - Sum(1/(k^3 + 2*k + 3), {k, 1, Infinity})"
-        + " + Sum(1/(k^3 + 2*k + 3), {k, 30001, Infinity}), 30)) < 10^-25", //
+    check(
+        "Abs(N(Sum(1/(k^3 + 2*k + 3), {k, 1, 30000}) - Sum(1/(k^3 + 2*k + 3), {k, 1, Infinity})"
+            + " + Sum(1/(k^3 + 2*k + 3), {k, 30001, Infinity}), 30)) < 10^-25", //
         "True");
-    check("Abs(N(Sum(1/((k^2 + 3)*(k + 1/3)^2), {k, 1, 20000})"
-        + " - Sum(1/((j^2 + 3)*(j + 1/3)^2), {j, 1, 20000}), 30)) < 10^-25", //
+    check(
+        "Abs(N(Sum(1/((k^2 + 3)*(k + 1/3)^2), {k, 1, 20000})"
+            + " - Sum(1/((j^2 + 3)*(j + 1/3)^2), {j, 1, 20000}), 30)) < 10^-25", //
         "True");
-    check("Abs(N(Sum(1/(2*k + 1), {k, 0, 12000}), 30) - Total(Table(N(1/(2*k + 1), 40), {k, 0, 12000})))"
-        + " < 10^-25", //
+    check(
+        "Abs(N(Sum(1/(2*k + 1), {k, 0, 12000}), 30) - Total(Table(N(1/(2*k + 1), 40), {k, 0, 12000})))"
+            + " < 10^-25", //
         "True");
   }
 
@@ -107,8 +111,9 @@ public class LongRangeSumTest extends ExprEvaluatorTestCase {
     // a value of the index doesn't leak into the product
     check("Block({k = 3}, Abs(NProduct(1 + 1/k^2, {k, 1, Infinity}) - Sinh(Pi)/Pi) < 10^-12)", //
         "True");
-    check("Abs(N(Product(1 + 3/k^3, {k, 1, Infinity})) - NProduct(1 + 3/k^3, {k, 1, Infinity}))"
-        + " < 10^-12", //
+    check(
+        "Abs(N(Product(1 + 3/k^3, {k, 1, Infinity})) - NProduct(1 + 3/k^3, {k, 1, Infinity}))"
+            + " < 10^-12", //
         "True");
   }
 
@@ -117,7 +122,8 @@ public class LongRangeSumTest extends ExprEvaluatorTestCase {
     // exact up to the iteration limit of the tests' engine
     check("HarmonicNumber(300) - HarmonicNumber(299)", //
         "1/300");
-    check("Total(Table(1/(3*k + 2), {k, 0, 3000})) == Fold(Plus, 0, Table(1/(3*k + 2), {k, 0, 3000}))", //
+    check(
+        "Total(Table(1/(3*k + 2), {k, 0, 3000})) == Fold(Plus, 0, Table(1/(3*k + 2), {k, 0, 3000}))", //
         "True");
     check("Plus @@ Join(Table(1/5, {200}), Table(3^50/11, {40}), Table(-3^50/11, {40}))", //
         "40");
@@ -135,8 +141,9 @@ public class LongRangeSumTest extends ExprEvaluatorTestCase {
     check("Simplify(1/(Gamma(2 + 5^(1/3))*Gamma(3 + I)*Gamma(3 - I)))", //
         "Sinh(Pi)/(10*Pi*Gamma(2+5^(1/3)))");
     // a product over the roots of a cubic
-    check("Abs(N(Product(1 + 3/k^3, {k, 1, Infinity})) - Product(N(1 + 3/k^3, 30), {k, 1, 4000}))"
-        + " < 10^-6", //
+    check(
+        "Abs(N(Product(1 + 3/k^3, {k, 1, Infinity})) - Product(N(1 + 3/k^3, 30), {k, 1, 4000}))"
+            + " < 10^-6", //
         "True");
   }
 }
