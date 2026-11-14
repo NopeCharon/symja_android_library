@@ -15396,6 +15396,16 @@ public class S {
       S.initFinalSymbol("LaunchKernels", ID.LaunchKernels);
 
   /**
+   * LayeredGraphPlot(x) - TODO describe `LayeredGraphPlot`.
+   * 
+   * @see <a href=
+   *      "https://raw.githubusercontent.com/axkr/symja_android_library/master/symja_android_library/doc/functions/LayeredGraphPlot.md">LayeredGraphPlot
+   *      documentation</a>
+   */
+  public final static IBuiltInSymbol LayeredGraphPlot =
+      S.initFinalSymbol("LayeredGraphPlot", ID.LayeredGraphPlot);
+
+  /**
    * LayerSizeFunction(x) - TODO describe `LayerSizeFunction`.
    * 
    * @see <a href=
