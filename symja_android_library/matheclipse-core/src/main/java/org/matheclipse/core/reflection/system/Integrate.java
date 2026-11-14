@@ -772,6 +772,14 @@ public class Integrate extends AbstractFunctionOptionEvaluator {
                 : F.NIL;
           }
           if (forcedMethod == null) {
+            // Integrate(E^(-s*x)*Abs(Sin(x)), {x,0,Infinity}) - one period of a periodic factor
+            IExpr periodic = periodicTimesDecay(arg1, xList.arg1(), xList.arg2(), xList.arg3(),
+                engine);
+            if (periodic.isPresent()) {
+              return periodic;
+            }
+          }
+          if (forcedMethod == null) {
             // Integrate(Abs(x)*Cos(3*x), {x,-Pi,Pi}) - split the interval at the numeric break
             // points of Piecewise, UnitStep, HeavisideTheta, Abs, Sign, Max, Min and integrate the
             // active branches piece by piece
@@ -2936,6 +2944,107 @@ public class Integrate extends AbstractFunctionOptionEvaluator {
     return new IExpr[] {root, value, slope};
   }
 
+  /**
+   * <code>Integrate(E^(l*x)*g(x), {x, a, Infinity})</code> with a real <code>a</code>,
+   * <code>Re(l) &lt; 0</code> and a factor <code>g</code> with <code>Abs</code> or
+   * <code>Sign</code> of sines and cosines of one frequency <code>c*x</code>: <code>g</code> has
+   * the period <code>T == 2*Pi/c</code> (or <code>T/2</code>), and the integral is the one over
+   * <code>{x, a, a+T}</code> divided by <code>1-E^(l*T)</code>. Splitting the infinite interval at
+   * the zeros of the sine never ends.
+   *
+   * @return {@link F#NIL} if the integral isn't of this kind
+   */
+  private static IExpr periodicTimesDecay(IExpr integrand, IExpr x, IExpr lower, IExpr upper,
+      EvalEngine engine) {
+    if (!lower.isRealResult() || !lower.isFree(x, true) || !upper.isInfinity() || !x.isSymbol()
+        || integrand.isFree(e -> e.isAST(S.Abs, 2) || e.isAST(S.Sign, 2), true)) {
+      return F.NIL;
+    }
+    IAST factors = integrand.isTimes() ? (IAST) integrand : F.Times(integrand);
+    IExpr decay = F.C0;
+    IASTAppendable rest = F.TimesAlloc(factors.argSize());
+    for (IExpr factor : factors) {
+      if (factor.isPower() && factor.base().equals(S.E) && !factor.exponent().isFree(x, true)) {
+        IExpr[] linear = factor.exponent().linear(x);
+        if (linear == null) {
+          return F.NIL;
+        }
+        decay = F.Plus(decay, linear[1]);
+        rest.append(F.Exp(linear[0]));
+      } else {
+        rest.append(factor);
+      }
+    }
+    final IExpr lambda = engine.evaluate(decay);
+    if (lambda.isZero() || !engine.evalTrue(F.Less(F.Re(lambda), F.C0))) {
+      return F.NIL;
+    }
+    final IExpr g = rest.oneIdentity1();
+    // the frequency: every Sin/Cos argument is c*x with the same Abs(c)
+    IExpr[] frequency = {F.NIL};
+    boolean[] periodic = {true};
+    // has() visits every subexpression when the predicate never holds
+    g.has(e -> {
+      if ((e.isSin() || e.isCos()) && !e.first().isFree(x, true)) {
+        IExpr[] linear = e.first().linear(x);
+        IExpr c = linear == null ? F.NIL : engine.evaluate(F.Abs(linear[1]));
+        if (c.isNIL() || !linear[0].isZero() || !c.isFree(x, true)
+            || (frequency[0].isPresent() && !frequency[0].equals(c))) {
+          periodic[0] = false;
+        } else {
+          frequency[0] = c;
+        }
+      }
+      return false;
+    }, true);
+    if (!periodic[0] || frequency[0].isNIL()) {
+      return F.NIL;
+    }
+    // x only inside of the Sin and Cos arguments
+    IExpr withoutTrig = F.subst(g, e -> (e.isSin() || e.isCos()) ? F.C1 : F.NIL);
+    if (!withoutTrig.isFree(x, true)) {
+      return F.NIL;
+    }
+    IExpr period = engine.evaluate(F.Divide(F.C2Pi, frequency[0]));
+    IExpr half = engine.evaluate(F.Divide(period, F.C2));
+    IExpr shifted = engine.evaluate(F.Subtract(F.subst(g, x, F.Plus(x, half)), g));
+    if (shifted.isZero() || engine.evalTrue(F.PossibleZeroQ(shifted))) {
+      period = half;
+    }
+    IExpr onePeriod =
+        engine.evalQuiet(F.Integrate(integrand, F.List(x, lower, F.Plus(lower, period))));
+    if (!onePeriod.isFreeAST(S.Integrate) || !onePeriod.isSpecialsFree()) {
+      return F.NIL;
+    }
+    final IExpr value = engine.evaluate(
+        F.Divide(onePeriod, F.Subtract(F.C1, F.Exp(F.Times(lambda, period)))));
+    IExpr simplified = TimeLimits.callOrNil(engine, () -> engine.evaluate(F.Simplify(value)),
+        MachineProfile.millis(PERIODIC_SIMPLIFY_MILLIS));
+    return simplified.isPresent() && simplified.leafCount() < value.leafCount() ? simplified
+        : value;
+  }
+
+  /** The time budget of the simplification in {@link #periodicTimesDecay}. */
+  private static final long PERIODIC_SIMPLIFY_MILLIS = 1_000L;
+
+  /**
+   * Whether the limit of an antiderivative has an infinity inside of a sum next to another
+   * infinity: the infinite parts of the terms didn't cancel, and the limit isn't decided.
+   */
+  private static boolean isUnsettledInfinity(IExpr limit) {
+    if (!limit.isPlus()) {
+      return false;
+    }
+    int infiniteTerms = 0;
+    for (IExpr term : (IAST) limit) {
+      if (!term.isFree(t -> t.isDirectedInfinity() || t.isIndeterminate(), true)
+          && ++infiniteTerms > 1) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /** The largest number of parameters {@link #withRealParameters} assumes to be real. */
   private static final int MAX_REAL_PARAMETERS = 3;
 
@@ -3133,13 +3242,15 @@ public class Integrate extends AbstractFunctionOptionEvaluator {
       // Log(x)/(x^2+a^2) converges on {x,0,Infinity}, and was said not to.
       return F.NIL;
     }
+    if (!lowerLimit.isFreeAST(S.Limit) || isUnsettledInfinity(lowerLimit)) {
+      // the limit stayed unevaluated - neither convergence nor divergence can be decided, so
+      // don't assemble a result containing raw Limit() calls; leave the integral unevaluated.
+      // First: the Infinity of its rule x->Infinity is no divergence. Infinities which didn't
+      // cancel, Infinity-I*Infinity/c+..., say nothing either.
+      return F.NIL;
+    }
     if (!lowerLimit.isSpecialsFree() || lowerLimit.isInterval() || lowerLimit.isIntervalData()) {
       return divergence(originalAST, lowerLimit, x, engine);
-    }
-    if (!lowerLimit.isFreeAST(S.Limit)) {
-      // the limit stayed unevaluated - neither convergence nor divergence can be decided, so
-      // don't assemble a result containing raw Limit() calls; leave the integral unevaluated
-      return F.NIL;
     }
     // quiet: an Infinity-Infinity inside of the limit is no message of the integral
     IExpr upperLimit = limitTermwise(function, x, upper, upperDirection, engine)
@@ -3149,11 +3260,11 @@ public class Integrate extends AbstractFunctionOptionEvaluator {
       // Log(x)/(x^2+a^2) converges on {x,0,Infinity}, and was said not to.
       return F.NIL;
     }
+    if (!upperLimit.isFreeAST(S.Limit) || isUnsettledInfinity(upperLimit)) {
+      return F.NIL;
+    }
     if (!upperLimit.isSpecialsFree() || upperLimit.isInterval() || upperLimit.isIntervalData()) {
       return divergence(originalAST, upperLimit, x, engine);
-    }
-    if (!upperLimit.isFreeAST(S.Limit)) {
-      return F.NIL;
     }
     // a complex argument of Log or ExpIntegralEi crossing the negative real axis inside the
     // interval: the antiderivative jumps there, the integral doesn't
@@ -3551,7 +3662,15 @@ public class Integrate extends AbstractFunctionOptionEvaluator {
       return F.NIL;
     }
     if (rest.argSize() > 0) {
-      finite.append(engine.evalQuiet(F.Limit(rest.oneIdentity0(), F.Rule(x, point), direction)));
+      IExpr restLimit =
+          engine.evalQuiet(F.Limit(rest.oneIdentity0(), F.Rule(x, point), direction));
+      if (!restLimit.isSpecialsFree()) {
+        // the divergent terms may cancel in the whole function, not in a part of it: ArcTan(2*x)
+        // times the Log terms of Log(4+9*x^2)/(1+4*x^2)^2 - the limit of the function decides,
+        // also a divergence
+        return engine.evalQuiet(F.Limit(function, F.Rule(x, point), direction));
+      }
+      finite.append(restLimit);
     }
     return engine.evaluate(finite.oneIdentity0());
   }

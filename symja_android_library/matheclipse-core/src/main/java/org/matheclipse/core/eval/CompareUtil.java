@@ -860,6 +860,7 @@ public class CompareUtil {
     final IAST terms = function.isPlus() ? function : F.List(function);
     final ThreadLocalRandom random = ThreadLocalRandom.current();
     int zeros = 0;
+    int undecided = 0;
     for (int trial = 0; trial < PRECISE_SAMPLES + 6 && zeros < PRECISE_SAMPLES; trial++) {
       IASTAppendable rules = F.ListAlloc(variables.argSize());
       for (int i = 1; i <= variables.argSize(); i++) {
@@ -881,6 +882,10 @@ public class CompareUtil {
       }
       if (zero == IExpr.COMPARE_TERNARY.TRUE) {
         zeros++;
+      } else if (++undecided > MAX_UNDECIDED_PRECISE_POINTS) {
+        // the values with 40 digits are not to be had, like AppellF1 far outside of the unit
+        // circle: no more time is spent on a second opinion
+        return false;
       }
     }
     if (zeros < PRECISE_SAMPLES) {
@@ -911,6 +916,12 @@ public class CompareUtil {
     return true;
   }
 
+  /** The points without a value in time after which {@link #isZeroAtPreciseSamples} gives up. */
+  private static final int MAX_UNDECIDED_PRECISE_POINTS = 3;
+
+  /** The time the value of one term with 40 digits at one point may take. */
+  private static final long PRECISE_POINT_MILLIS = 2_000L;
+
   /** The real points which {@link #isZeroAtPreciseSamples} evaluates with 40 digits at most. */
   private static final int MAX_PRECISE_REAL_POINTS = 24;
 
@@ -924,7 +935,11 @@ public class CompareUtil {
     double scale = 0.0;
     IASTAppendable values = F.PlusAlloc(terms.argSize());
     for (int i = 1; i <= terms.argSize(); i++) {
-      IExpr value = evalPrecise(F.subst(terms.get(i), rules), 40, engine);
+      final IExpr term = F.subst(terms.get(i), rules);
+      // a value which takes long is no value here: 40 digits of AppellF1 at u^2 == 5 run for
+      // minutes
+      IExpr value = TimeLimits.callOrNil(engine, () -> evalPrecise(term, 40, engine),
+          org.matheclipse.core.basic.MachineProfile.millis(PRECISE_POINT_MILLIS));
       double magnitude =
           value.isNumber() ? engine.evalQuiet(F.N(F.Abs(value))).evalfNaN() : Double.NaN;
       if (Double.isNaN(magnitude) || Double.isInfinite(magnitude)) {

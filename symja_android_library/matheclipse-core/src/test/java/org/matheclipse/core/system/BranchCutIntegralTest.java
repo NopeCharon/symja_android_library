@@ -58,9 +58,9 @@ public class BranchCutIntegralTest extends ExprEvaluatorTestCase {
 
   @Test
   public void testPeriodicAbsOnInfiniteInterval() {
-    // the zeros of Sin(2*x/3) on (0, Infinity) aren't listed: no value from Sin(2*x/3) alone
+    // the zeros of Sin(2*x/3) on (0, Infinity) aren't listed: one half period over 1-E^(-15/4*Pi)
     check("Integrate(Abs(Sin(2*x/3))*E^(-5*x/2), {x, 0, Infinity})", //
-        "Integrate(Abs(Sin(2*x/3))/E^(5*x/2),{x,0,Infinity})");
+        "24/241*(1+E^(15/4*Pi))/(-1+E^(15/4*Pi))");
   }
 
   @Test

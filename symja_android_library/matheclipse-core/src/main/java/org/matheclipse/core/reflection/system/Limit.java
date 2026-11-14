@@ -5224,6 +5224,15 @@ public final class Limit extends AbstractFunctionOptionEvaluator {
               return value;
             }
           }
+          if (c.isRealResult() && r.isRealResult()) {
+            // an odd function: saturation*Sign(c*r) for a real r != 0. At r == 0 the argument
+            // isn't infinite: ArcTan((p-q)*x+1) tends to ArcTan(1) for p == q
+            IExpr value = F.Times(saturation, F.Sign(F.Times(c, r)));
+            if (EvalEngine.get().evalTrue(F.Refine(F.Unequal(r, F.C0)))) {
+              return value;
+            }
+            return F.ConditionalExpression(value, F.Unequal(r, F.C0));
+          }
           if (c.isRealResult()) {
             // an odd function: the sign of the direction decides, under the condition r > 0
             IExpr signed = c.isNegativeResult() ? F.Negate(saturation) : saturation;
