@@ -4692,12 +4692,16 @@ public final class StringFunctions {
 
     /**
      * Built-in heads whose reported precedence isn't the parser's: the logical operators share one
-     * level, <code>Sum</code> and <code>Limit</code> sit with the big operators, and some heads
-     * have a precedence without an operator row of their own.
+     * level, <code>Sum</code> and <code>Limit</code> sit with the big operators, <code>SameQ</code>
+     * and <code>UnsameQ</code> with the comparisons although they are read one step looser,
+     * <code>TagSet</code> reports the precedence of a function call, and some heads have a
+     * precedence without an operator row of their own.
      */
     private static final String[][] REPORTED = {{"And", "215"}, {"Nand", "215"},
         {"Xor", "215"}, {"Optional", "140"}, {"Postfix", "70"}, {"Prefix", "640"},
-        {"Blank", "730"}, {"Sum", "320"}, {"Limit", "320"}, {"D", "550"},
+        {"Infix", "630"}, {"Blank", "730"}, {"Slot", "740"}, {"SlotSequence", "740"},
+        {"Complex", "310"}, {"UpArrow", "580"}, {"SameQ", "290"}, {"UnsameQ", "290"},
+        {"TagSet", "670"}, {"Sum", "320"}, {"Limit", "320"}, {"D", "550"},
         {"TensorProduct", "495"}, {"RightComposition", "648"}, {"Composition", "650"}};
 
     private static void initPrecedences() {

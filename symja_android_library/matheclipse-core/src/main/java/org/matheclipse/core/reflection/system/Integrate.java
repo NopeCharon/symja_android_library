@@ -1670,8 +1670,120 @@ public class Integrate extends AbstractFunctionOptionEvaluator {
     return F.NIL;
   }
 
+  /**
+   * A rational function whose numerator and denominator with integer coefficients have a common
+   * factor, divided through by it: <code>2*x/(-2+2*x)</code> is <code>x/(-1+x)</code>, whose
+   * integral has no constant factor left over its terms, and <code>-x/(x-2*x^2)</code> is
+   * <code>1/(-1+2*x)</code> - a negative constant numerator left over goes into the denominator.
+   *
+   * @return {@link F#NIL} if numerator and denominator have no common factor
+   */
+  private static IExpr withoutCommonFactor(final IAST function, final IExpr x,
+      final EvalEngine engine) {
+    final IExpr numerator = engine.evaluate(F.Numerator(function));
+    final IExpr denominator = engine.evaluate(F.Denominator(function));
+    if (!denominator.isPlus() || !numerator.isPolynomial(x) || !denominator.isPolynomial(x)
+        || !hasIntegerCoefficients(numerator, x, engine)
+        || !hasIntegerCoefficients(denominator, x, engine)) {
+      return F.NIL;
+    }
+    final IExpr gcd = engine.evaluate(F.PolynomialGCD(numerator, denominator));
+    if (gcd.isOne() || gcd.isMinusOne() || !gcd.isPolynomial(x)) {
+      return F.NIL;
+    }
+    IExpr reducedNumerator =
+        engine.evaluate(F.Expand(F.PolynomialQuotient(numerator, gcd, x)));
+    IExpr reducedDenominator =
+        engine.evaluate(F.Expand(F.PolynomialQuotient(denominator, gcd, x)));
+    if (!gcd.isFree(x) && reducedNumerator.isNumber() && reducedNumerator.isNegative()) {
+      reducedNumerator = reducedNumerator.negate();
+      reducedDenominator = engine.evaluate(F.Expand(F.Negate(reducedDenominator)));
+    }
+    return engine.evaluate(F.Divide(reducedNumerator, reducedDenominator));
+  }
+
+  /**
+   * A quick look at the factors before {@link #withoutCommonFactor}: numbers, polynomials in
+   * <code>x</code> and integer powers of them, at least one of them with a negative exponent.
+   */
+  private static boolean isRationalProduct(final IAST product, final IExpr x) {
+    boolean quotient = false;
+    for (IExpr factor : product) {
+      if (factor.isNumber()) {
+        continue;
+      }
+      if (factor.isPower() && factor.exponent().isInteger()) {
+        if (factor.exponent().isNegative()) {
+          quotient = true;
+        }
+        factor = factor.base();
+      }
+      if (!factor.isPolynomial(x)) {
+        return false;
+      }
+    }
+    return quotient;
+  }
+
+  private static boolean hasIntegerCoefficients(final IExpr polynomial, final IExpr x,
+      final EvalEngine engine) {
+    final IExpr coefficients = engine.evaluate(F.CoefficientList(polynomial, x));
+    return coefficients.isList() && ((IAST) coefficients).forAll(c -> c.isInteger());
+  }
+
+  /**
+   * <code>c/(a*x+b)</code> with rational numbers <code>a, b, c</code>: <code>c/a*Log(a*x+b)</code>
+   * with the denominator as it is written, <code>1/(5-10*x)</code> gives
+   * <code>-1/10*Log(5-10*x)</code>.
+   *
+   * @return {@link F#NIL} if the integrand is not of this form
+   */
+  private static IExpr integrateReciprocalLinear(final IAST function, final IExpr x,
+      final EvalEngine engine) {
+    IExpr c = F.C1;
+    IExpr reciprocal = function;
+    if (function.isTimes()) {
+      if (!function.isAST2() || !function.arg1().isRational()) {
+        return F.NIL;
+      }
+      c = function.arg1();
+      reciprocal = function.arg2();
+    }
+    if (!reciprocal.isPower() || !reciprocal.exponent().isMinusOne()
+        || !reciprocal.base().isPlus()) {
+      return F.NIL;
+    }
+    final IExpr linear = reciprocal.base();
+    if (!linear.isPolynomial(x)) {
+      return F.NIL;
+    }
+    final IExpr coefficients = engine.evaluate(F.CoefficientList(linear, x));
+    if (!coefficients.isList() || coefficients.argSize() != 2
+        || !((IAST) coefficients).forAll(e -> e.isRational()) || coefficients.first().isZero()) {
+      return F.NIL;
+    }
+    final IRational a = (IRational) coefficients.second();
+    // the argument keeps its sign: a negated argument, as for -1/(5+3*x), would put a complex
+    // constant into the results built from the integral, like solutions of differential equations
+    return step(engine, function, x, F.Times(F.Divide(c, a), F.Log(linear)), "LinearDenominator",
+        linear);
+  }
+
   private static IExpr integrateTimesPower(final IAST function, final IExpr x) {
     final EvalEngine engine = EvalEngine.get();
+    if (function.isTimes() && isRationalProduct(function, x)) {
+      final IExpr reduced = withoutCommonFactor(function, x, engine);
+      if (reduced.isPresent() && !reduced.equals(function)) {
+        // Integrate(g*p/(g*q), x) -> Integrate(p/q, x)
+        return step(engine, function, x, Integrate(reduced, x), "SharedContent", reduced);
+      }
+    }
+    if (function.isTimes() || function.isPower()) {
+      final IExpr logarithm = integrateReciprocalLinear(function, x, engine);
+      if (logarithm.isPresent()) {
+        return logarithm;
+      }
+    }
     if (function.isTimes()) {
       IAST[] temp = function.filter(arg -> arg.isFree(x));
       IExpr free = temp[0].oneIdentity1();

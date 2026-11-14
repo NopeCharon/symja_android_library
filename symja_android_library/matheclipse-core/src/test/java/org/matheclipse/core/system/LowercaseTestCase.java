@@ -5335,7 +5335,7 @@ public class LowercaseTestCase extends ExprEvaluatorTestCase {
     check("Csc(2/5*Pi)", //
         "Sqrt(2-2/Sqrt(5))");
     check("Csc(23/12*Pi)", //
-        "-2*Sqrt(2+Sqrt(3))");
+        "-Sqrt(2)*(1+Sqrt(3))");
     check("Csc(z+1/2*Pi)", //
         "Sec(z)");
     check("Csc(Pi)", //
@@ -31075,7 +31075,7 @@ public class LowercaseTestCase extends ExprEvaluatorTestCase {
 
     check(
         "Normalize({0.9999999999999999, -0.12609662354252538+I*0.3870962681438435, 0.3692814336284687+I*0.0968290630091466})", //
-        "{0.87320809401366097,-0.1101085923051267+I*0.33801559450568668,0.32245953681334746+I*0.08455192155534558}");
+        "{0.87320809401366097,-0.110108592305127+I*0.3380155945056867,0.3224595368133475+I*0.0845519215553456}");
 
     check("Normalize({0})", //
         "{0}");
@@ -38685,7 +38685,7 @@ public class LowercaseTestCase extends ExprEvaluatorTestCase {
     check("Sec(2/5*Pi)", //
         "1+Sqrt(5)");
     check("Sec(23/12*Pi)", //
-        "-Sqrt(2)+Sqrt(6)");
+        "Sqrt(2)*(-1+Sqrt(3))");
     check("Sec(z+1/2*Pi)", //
         "-Csc(z)");
     check("Sec(Pi)", //

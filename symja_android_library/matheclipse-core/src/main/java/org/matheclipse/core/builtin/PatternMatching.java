@@ -2616,6 +2616,12 @@ public final class PatternMatching {
           if (head.topHead() == S.Association) {
             head = S.Association;
           }
+          if (isProtectedAtomHead(leftHandSide, head)) {
+            // Tag `1` in `2` is Protected.
+            Errors.printMessage(S.Set, "write",
+                F.list(head.head(), ((IAST) leftHandSide).setAtCopy(0, head)), engine);
+            return ast.arg2();
+          }
         }
         IExpr rightHandSide = ast.arg2();
         // try {
@@ -2676,6 +2682,15 @@ public final class PatternMatching {
     }
   }
 
+
+  /**
+   * Whether the head of <code>lhs</code> evaluates to a number or a string: <code>n[p][1] = v</code>
+   * where <code>n[p]</code> is <code>1</code> assigns to <code>1[1]</code>, and the tag
+   * <code>Integer</code> of that is protected.
+   */
+  private static boolean isProtectedAtomHead(IExpr lhs, IExpr evaluatedHead) {
+    return lhs.isAST() && (evaluatedHead.isNumber() || evaluatedHead.isString());
+  }
 
   /** Whether <code>lhs</code> is <code>h /; test</code> with a symbol <code>h</code>. */
   private static boolean isConditionalSymbol(IExpr lhs) {
@@ -2786,6 +2801,12 @@ public final class PatternMatching {
         }
         if (head.isAssociation()) {
           head = S.Association;
+        }
+        if (isProtectedAtomHead(leftHandSide, head)) {
+          // Tag `1` in `2` is Protected.
+          Errors.printMessage(S.SetDelayed, "write",
+              F.list(head.head(), ((IAST) leftHandSide).setAtCopy(0, head)), engine);
+          return S.$Failed;
         }
         try {
           final IExpr rightHandSide = ast.arg2();

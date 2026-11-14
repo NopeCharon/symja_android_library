@@ -1370,8 +1370,7 @@ public final class Arithmetic {
             if (current.argSize() < 2) {
               return F.CEmptyList;
             }
-            // Use the standard {1, -1} kernel for a single difference step
-            current = engine.evaluate(F.ListConvolve(F.list(F.C1, F.CN1), current));
+            current = engine.evaluate(firstDifferences((IAST) current));
           }
           return current;
 
@@ -1382,6 +1381,22 @@ public final class Arithmetic {
       }
 
       return F.NIL;
+    }
+
+    /**
+     * The successive differences {@code {a2 - a1, a3 - a2, ...}} of the elements at the first
+     * level. The elements may themselves be lists (a list of points gives the list of difference
+     * vectors), so the subtraction is left to {@code Subtract}, which threads over them.
+     *
+     * @param list a list with at least two elements
+     */
+    private static IAST firstDifferences(IAST list) {
+      final int n = list.argSize();
+      IASTAppendable result = F.ListAlloc(n - 1);
+      for (int i = 1; i < n; i++) {
+        result.append(F.Subtract(list.get(i + 1), list.get(i)));
+      }
+      return result;
     }
 
     @Override

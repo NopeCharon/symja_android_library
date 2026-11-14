@@ -490,8 +490,10 @@ public class SvgGraphics2D {
         return;
       }
     }
-    // a ratio far from square would otherwise produce an unusable canvas
-    double drawHeight = Math.max(MIN_DRAWING_HEIGHT, Math.min(drawWidth * ratio, drawWidth * 4.0));
+    // a ratio far from square would otherwise produce an unusable canvas; the floor is never
+    // higher than the drawing is wide, so a small picture keeps the shape it asked for
+    double drawHeight = Math.max(Math.min(MIN_DRAWING_HEIGHT, drawWidth),
+        Math.min(drawWidth * ratio, drawWidth * 4.0));
     options.imageSize[1] = drawHeight + padding[2] + padding[3];
   }
 

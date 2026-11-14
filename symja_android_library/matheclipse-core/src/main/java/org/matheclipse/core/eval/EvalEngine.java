@@ -5802,6 +5802,72 @@ public class EvalEngine implements Serializable {
     return Config.MAX_EXTRA_PRECISION;
   }
 
+  /**
+   * The decimal precision of an arbitrary-precision arithmetic result within the bounds
+   * <code>$MinPrecision</code> and <code>$MaxPrecision</code> of this engine: <code>0</code> and
+   * <code>Infinity</code> if they have no value.
+   *
+   * @param precision the precision of the result by significance arithmetic
+   */
+  public double boundedPrecision(double precision) {
+    if (fDollarSymbolMap == null) {
+      return precision;
+    }
+    final IExpr min = fDollarSymbolMap.get(S.$MinPrecision);
+    if (min != null) {
+      final double lower = precisionBound(S.$MinPrecision, min);
+      if (precision < lower) {
+        precision = lower;
+      }
+    }
+    final IExpr max = fDollarSymbolMap.get(S.$MaxPrecision);
+    if (max != null) {
+      final double upper = precisionBound(S.$MaxPrecision, max);
+      if (precision > upper) {
+        precision = upper;
+      }
+    }
+    return precision;
+  }
+
+  /**
+   * The value of <code>$MinPrecision</code> (<code>lower == true</code>) or
+   * <code>$MaxPrecision</code> in this engine, or {@link F#NIL} if it has none or it is no
+   * non-negative number or <code>Infinity</code>.
+   */
+  public IExpr precisionBoundValue(boolean lower) {
+    if (fDollarSymbolMap == null) {
+      return F.NIL;
+    }
+    final IBuiltInSymbol symbol = lower ? S.$MinPrecision : S.$MaxPrecision;
+    final IExpr value = fDollarSymbolMap.get(symbol);
+    if (value == null || Double.isNaN(precisionBound(symbol, value))) {
+      return F.NIL;
+    }
+    return fDollarSymbolMap.get(symbol);
+  }
+
+  /**
+   * A bound of the precision: <code>NaN</code> if it is no non-negative number. A bound which is
+   * not yet a number, like <code>MachinePrecision</code>, is evaluated once and kept in its
+   * evaluated form for the rest of the <code>Block</code> which set it.
+   */
+  private double precisionBound(IBuiltInSymbol symbol, IExpr value) {
+    if (!value.isReal() && !value.isInfinity()) {
+      value = evaluate(value);
+      if (value.isReal() || value.isInfinity()) {
+        fDollarSymbolMap.put(symbol, value);
+      }
+    }
+    if (value.isInfinity()) {
+      return Double.POSITIVE_INFINITY;
+    }
+    if (value.isReal() && !value.isNegative()) {
+      return ((IReal) value).doubleValue();
+    }
+    return Double.NaN;
+  }
+
   /** The first argument of the <code>meprec</code> message: <code>$MaxExtraPrecision = 50.</code> */
   public static IExpr maxExtraPrecisionText() {
     final IExpr value = maxExtraPrecisionValue();
@@ -7410,11 +7476,10 @@ public class EvalEngine implements Serializable {
         final int argSize = association.argSize();
         if (refArgSize < 0) {
           refArgSize = argSize;
-        } else if (refArgSize != argSize) {
-          // tdlen: Objects of unequal length in `1` cannot be combined.
-          return invalidListable(ast, commandHead, messageShortcut, F.list(ast));
         }
         if (refAssociation != null) {
+          // associations with other keys are incompatible, whatever their lengths:
+          // <|a->1,b->2|>+<|a->3|>
           if (refAssociation.size() != association.size()) {
             // incmp: The arguments `1` and `2` in `3` are incompatible.
             return invalidListable(ast, S.Association, "incmp",

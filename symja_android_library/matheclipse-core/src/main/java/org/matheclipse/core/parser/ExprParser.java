@@ -2076,6 +2076,11 @@ public class ExprParser extends Scanner {
         break;
       }
       if (fToken == TT_DERIVATIVE) {
+        if (Precedence.DERIVATIVE < min_precedence) {
+          // an operand of a tighter operator ends before the ': ++f', g@f' and g/@f' are the
+          // derivatives of ++f, g@f and g/@f
+          break;
+        }
         lhs = parseDerivative(lhs);
         // f'[x] may be followed by a juxtaposed factor (f'[x] g[x]), another operator or a span,
         // so the climb starts over; falling through to the operator test made f'[x] g[x] a syntax
@@ -2449,7 +2454,7 @@ public class ExprParser extends Scanner {
     if (prefixOperator.getFunctionName().equals("PreMinus")) {
       // special cases for negative numbers
       if (temp.isNumber()) {
-        return temp.negate();
+        return ExprParserFactory.SubtractExprOperator.negateNumber(temp);
       }
     }
     return prefixOperator.createFunction(fFactory, temp);

@@ -977,9 +977,9 @@ public class BooleanTest extends ExprEvaluatorTestCase {
     check("a<1<2<3<4<=b<5", //
         "a<1<4<=b<5");
     check("Inequality(-1,Less,0,Lest,1)", //
-        "Inequality(-1,Less,0,lest,1)");
+        "Inequality(0,lest,1)");
     check("Inequality(-1,Lest,0,Less,1)", //
-        "Inequality(-1,lest,0,Less,1)");
+        "Inequality(-1,lest,0)");
   }
 
   @Test
@@ -1507,5 +1507,24 @@ public class BooleanTest extends ExprEvaluatorTestCase {
     // 2 is no truth value
     check("BooleanFunction({{1, 2} -> 1})", //
         "BooleanFunction({{1,2}->1})");
+  }
+
+  @Test
+  public void testInequalityWithUnknownRelation() {
+    // the chain splits at a relation which is no comparison
+    check("Inequality(1, Less, a, Rel, 4)", //
+        "1<a&&Inequality(a,rel,4)");
+    check("Inequality(1, Less, a, Rel, 4, LessEqual, 7)", //
+        "1<a&&Inequality(a,rel,4)");
+    check("Inequality(1, Rel, a, rel2, 4)", //
+        "Inequality(1,rel,a)&&Inequality(a,rel2,4)");
+    check("Inequality(2, Less, a, Greater, b, Rel, c)", //
+        "2<a&&a>b&&Inequality(b,rel,c)");
+    check("Inequality(-2, Less, 7, Rel, a)", //
+        "Inequality(7,rel,a)");
+    check("Inequality(7, Less, -2, Rel, a)", //
+        "False");
+    check("Inequality(a, Rel, b)", //
+        "Inequality(a,rel,b)");
   }
 }

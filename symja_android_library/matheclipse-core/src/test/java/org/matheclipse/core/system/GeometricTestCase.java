@@ -1740,7 +1740,7 @@ public class GeometricTestCase extends ExprEvaluatorTestCase {
             + "3},{Prism,5},{Prism,6},{Prism,7},{Prism,8},{Prism,9},{Prism,10},{Pyramid,4},{Pyramid,\n"
             + "5},RhombicDodecahedron,RhombicTriacontahedron,Tetrahedron,TruncatedIcosahedron}");
     check("PolyhedronData(\"Properties\")", //
-        "{Circumradius,EdgeCount,EdgeIndices,Edges,FaceCount,FaceCountRules,FaceIndices,Faces,Name,StandardName,VertexCoordinates,VertexCount,Volume}");
+        "{Circumradius,Dual,EdgeCount,EdgeIndices,Edges,FaceCount,FaceCountRules,FaceIndices,Faces,Image,Name,NetFaces,NetImage,SkeletonImage,StandardName,VertexCoordinates,VertexCount,Volume}");
     // the edges are vertex index pairs, as many as EdgeCount, each joining two vertices of a face
     check("{Length(PolyhedronData(\"TruncatedIcosahedron\", \"Edges\")), "
         + "PolyhedronData(\"TruncatedIcosahedron\", \"EdgeCount\"), "
@@ -1841,6 +1841,64 @@ public class GeometricTestCase extends ExprEvaluatorTestCase {
   }
 
   @Test
+  public void testPolyhedronDataDual() {
+    // the dual is drawn: the polar reciprocal in the sphere through the edge midpoints, here the
+    // cube with the edge 1/Sqrt(2) around the octahedron with the edge 1
+    check("PolyhedronData(\"Octahedron\", \"Dual\") // InputForm", //
+        "Graphics3D(GraphicsComplex({{1/(2*Sqrt(2)),1/(2*Sqrt(2)),1/(2*Sqrt(2))},"
+            + "{1/(2*Sqrt(2)),1/(2*Sqrt(2)),-1/(2*Sqrt(2))},{1/(2*Sqrt(2)),-1/(2*Sqrt(2)),1/(2*Sqrt(2))},"
+            + "{1/(2*Sqrt(2)),-1/(2*Sqrt(2)),-1/(2*Sqrt(2))},{-1/(2*Sqrt(2)),1/(2*Sqrt(2)),1/(2*Sqrt(2))},"
+            + "{-1/(2*Sqrt(2)),1/(2*Sqrt(2)),-1/(2*Sqrt(2))},{-1/(2*Sqrt(2)),-1/(2*Sqrt(2)),1/(2*Sqrt(2))},"
+            + "{-1/(2*Sqrt(2)),-1/(2*Sqrt(2)),-1/(2*Sqrt(2))}},"
+            + "Polygon({{2,1,3,4},{7,5,6,8},{5,1,2,6},{4,3,7,8},{3,1,5,7},{6,2,4,8}})))");
+    // a vertex of the dual for every face, a face of the dual for every vertex
+    check("d = PolyhedronData(\"Icosidodecahedron\", \"Dual\"); "
+        + "{Length(d[[1, 1]]), Length(d[[1, 2, 1]]), Union(Length /@ d[[1, 2, 1]])}", //
+        "{32,30,{4}}");
+    // the dual of a square pyramid is again a square pyramid, that of a prism a dipyramid
+    check("Map(Length, PolyhedronData(#, \"Dual\")[[1, 2, 1]] & /@ {\"SquarePyramid\", "
+        + "{\"Prism\", 7}, {\"Antiprism\", 4}}, {2})", //
+        "{{4,3,3,3,3},{3,3,3,3,3,3,3,3,3,3,3,3,3,3},{4,4,4,4,4,4,4,4}}");
+    // the name of the dual
+    check("PolyhedronData(#, \"Dual\", \"Name\") & /@ {\"Icosahedron\", \"Icosidodecahedron\", "
+        + "\"RhombicDodecahedron\", \"TruncatedIcosahedron\"}", //
+        "{Dodecahedron,RhombicTriacontahedron,Cuboctahedron,PentakisDodecahedron}");
+    // prisms and dipyramids are dual to each other, a pyramid to itself; the antiprism duals have
+    // no name here
+    check("PolyhedronData(#, \"Dual\", \"Name\") & /@ {{\"Prism\", 7}, {\"Dipyramid\", 5}, "
+        + "{\"Pyramid\", 5}, {\"Antiprism\", 8}, {\"Dipyramid\", 4}}", //
+        "{{Dipyramid,7},{Prism,5},{Pyramid,5},Missing(NotAvailable),Cube}");
+  }
+
+  @Test
+  public void testPolyhedronDataPictures() {
+    // "Image" is the picture of PolyhedronData(name)
+    check("{PolyhedronData(\"Icosidodecahedron\", \"Image\") === PolyhedronData(\"Icosidodecahedron\"), "
+        + "PolyhedronData({\"Antiprism\", 5}, \"Image\") === PolyhedronData({\"Antiprism\", 5})}", //
+        "{True,True}");
+    // the skeleton: flat points, every edge once, every vertex once
+    check("g = PolyhedronData(\"Icosahedron\", \"SkeletonImage\"); "
+        + "{Head(g), Dimensions(g[[1, 1]]), Length(Cases(g, Line(e_) :> e, Infinity)[[1]]), "
+        + "Length(Cases(g, Point(p_) :> p, Infinity)[[1]])}", //
+        "{Graphics,{12,2},30,12}");
+    // a net keeps the side count of every face and the unit edges
+    check("net = PolyhedronData({\"Prism\", 6}, \"NetFaces\"); "
+        + "{Head(net), Length /@ net[[2, 1]], Union(Round(Flatten(Map(Norm(net[[1, #[[1]]]] - net[[1, #[[2]]]]) &, "
+        + "Partition(#, 2, 1, 1) & /@ net[[2, 1]], {2})), 10^-9))}", //
+        "{GraphicsComplex,{6,6,4,4,4,4,4,4},{1}}");
+    // the faces of the unfolding of the cube share their corners: 14 points, not 24
+    check("Dimensions(PolyhedronData(\"Cube\", \"NetFaces\")[[1]])", //
+        "{14,2}");
+    // the unfolded faces have the area of the surface
+    check("net = PolyhedronData(\"Dodecahedron\", \"NetFaces\"); "
+        + "Chop(Total(Area(Polygon(net[[1, #]])) & /@ net[[2, 1]]) - 3*Sqrt(25 + 10*Sqrt(5)))", //
+        "0");
+    check("Head /@ {PolyhedronData(\"Tetrahedron\", \"NetImage\"), "
+        + "PolyhedronData(\"RhombicTriacontahedron\", \"NetFaces\")}", //
+        "{Graphics,Missing}");
+  }
+
+  @Test
   public void testPolyhedronDataClassProperty() {
     // a property of a class maps over its members, in the order of PolyhedronData(class)
     check("PolyhedronData(\"Prism\", \"EdgeCount\")", //
@@ -1861,7 +1919,7 @@ public class GeometricTestCase extends ExprEvaluatorTestCase {
     check("EntityValue(Entity(\"Polyhedron\", \"Icosahedron\"), {\"VertexCount\",\"EdgeCount\"})", //
         "{12,30}");
     check("EntityValue(\"Polyhedron\", \"Properties\")", //
-        "{Circumradius,EdgeCount,EdgeIndices,Edges,FaceCount,FaceCountRules,FaceIndices,Faces,Name,StandardName,VertexCoordinates,VertexCount,Volume}");
+        "{Circumradius,Dual,EdgeCount,EdgeIndices,Edges,FaceCount,FaceCountRules,FaceIndices,Faces,Image,Name,NetFaces,NetImage,SkeletonImage,StandardName,VertexCoordinates,VertexCount,Volume}");
     // the edges are vertex index pairs, as many as EdgeCount, each joining two vertices of a face
     check("{Length(PolyhedronData(\"TruncatedIcosahedron\", \"Edges\")), "
         + "PolyhedronData(\"TruncatedIcosahedron\", \"EdgeCount\"), "

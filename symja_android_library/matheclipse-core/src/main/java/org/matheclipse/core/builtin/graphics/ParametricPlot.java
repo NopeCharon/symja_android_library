@@ -455,10 +455,14 @@ public class ParametricPlot extends Plot {
         boolean previousFinite = false;
         boolean previousDrawn = false;
 
-        for (int i = 0; i <= steps; i++) {
-          double t = tMinD + i * step;
+        // the parameters to sample at: the even sweep, refined where the curve turns sharply
+        final List<double[]> samples = refinedSamples(fx, fy, tSym, tMinD, step, steps,
+            maxRecursion < 0 ? DEFAULT_REFINEMENT_LEVELS : maxRecursion, engine);
+        for (int i = 0; i < samples.size(); i++) {
+          final double[] sample = samples.get(i);
+          double t = sample[0];
           // the sample before, as it was computed: t - step may round to the other side of a cut
-          if (i > 0 && isCut(cuts, tMinD + (i - 1) * step, t)) {
+          if (i > 0 && isCut(cuts, samples.get(i - 1)[0], t)) {
             // an exclusion lies between the last sample and this one: the curve ends there
             if (linePoints.argSize() > 1) {
               segments.append(linePoints);
@@ -466,7 +470,7 @@ public class ParametricPlot extends Plot {
             linePoints = F.ListAlloc(steps);
             previousFinite = false;
           }
-          double[] point = curvePoint(fx, fy, tSym, t, engine);
+          double[] point = Double.isNaN(sample[1]) ? null : new double[] {sample[1], sample[2]};
           boolean drawn =
               point != null && (region == null || region.accepts(point[0], point[1], t));
           if (region != null && point != null && previousFinite && drawn != previousDrawn) {
@@ -503,6 +507,87 @@ public class ParametricPlot extends Plot {
     }
 
     return listOfLines;
+  }
+
+  /** How many times an interval of the even sweep is halved at most where the curve turns. */
+  private static final int DEFAULT_REFINEMENT_LEVELS = 6;
+
+  /** The largest turn, in radians, between two consecutive segments that is left unrefined. */
+  private static final double MAX_TURN = 0.2;
+
+  /** The most samples refinement adds to one curve. */
+  private static final int MAX_REFINEMENT_SAMPLES = 20000;
+
+  /**
+   * The samples {@code {t, x, y}} of a curve, {@code x} and {@code y} being {@code NaN} where the
+   * curve has no point: {@code steps + 1} evenly spaced values, with the
+   * intervals on either side of a sample where the curve turns by more than {@link #MAX_TURN}
+   * halved, up to {@code levels} times. A curve that winds many times is swept by too few samples
+   * at its tight turns; refining there keeps the polyline from showing corners the curve does not
+   * have. Samples without a point of the curve are left alone, so a pole or a gap in the curve is
+   * not refined into.
+   */
+  private static List<double[]> refinedSamples(IExpr fx, IExpr fy, ISymbol tSym, double tMin,
+      double step, int steps, int levels, EvalEngine engine) {
+    List<double[]> samples = new ArrayList<>(steps + 1);
+    for (int i = 0; i <= steps; i++) {
+      double t = tMin + i * step;
+      samples.add(new double[] {t, Double.NaN, Double.NaN});
+      double[] point = curvePoint(fx, fy, tSym, t, engine);
+      if (point != null) {
+        samples.get(i)[1] = point[0];
+        samples.get(i)[2] = point[1];
+      }
+    }
+    int added = 0;
+    for (int level = 0; level < levels && added < MAX_REFINEMENT_SAMPLES; level++) {
+      engine.checkTimeLimit();
+      int n = samples.size();
+      boolean[] split = new boolean[n];
+      boolean any = false;
+      for (int k = 1; k < n - 1; k++) {
+        if (turn(samples.get(k - 1), samples.get(k), samples.get(k + 1)) > MAX_TURN) {
+          split[k - 1] = true;
+          split[k] = true;
+          any = true;
+        }
+      }
+      if (!any) {
+        break;
+      }
+      List<double[]> refined = new ArrayList<>(n * 2);
+      for (int k = 0; k < n; k++) {
+        double[] sample = samples.get(k);
+        refined.add(sample);
+        if (k < n - 1 && split[k] && added < MAX_REFINEMENT_SAMPLES) {
+          double t = 0.5 * (sample[0] + samples.get(k + 1)[0]);
+          double[] point = curvePoint(fx, fy, tSym, t, engine);
+          refined.add(point == null ? new double[] {t, Double.NaN, Double.NaN}
+              : new double[] {t, point[0], point[1]});
+          added++;
+        }
+      }
+      samples = refined;
+    }
+    return samples;
+  }
+
+  /**
+   * The angle between the segments {@code a -> b} and {@code b -> c}; {@code 0} where a point is
+   * missing or a segment has no length.
+   */
+  private static double turn(double[] a, double[] b, double[] c) {
+    double ux = b[1] - a[1];
+    double uy = b[2] - a[2];
+    double vx = c[1] - b[1];
+    double vy = c[2] - b[2];
+    double lu = Math.hypot(ux, uy);
+    double lv = Math.hypot(vx, vy);
+    if (!(lu > 0.0) || !(lv > 0.0) || !Double.isFinite(lu) || !Double.isFinite(lv)) {
+      return 0.0;
+    }
+    double cos = (ux * vx + uy * vy) / (lu * lv);
+    return Math.acos(Math.max(-1.0, Math.min(1.0, cos)));
   }
 
   /**

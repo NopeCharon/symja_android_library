@@ -251,8 +251,18 @@ public final class AxesFrameRenderer {
     return x.isList() && x.argSize() >= 2 && x.first().isReal() && !x.second().isReal();
   }
 
-  /** The tick specification for one frame edge, indexed left, right, bottom, top. */
+  /**
+   * The tick specification for one frame edge, indexed left, right, bottom, top. {@code True}
+   * stands for the automatic ticks on the bottom and left edge and for no ticks on the top and
+   * right edge, in every form the option is written in.
+   */
   private IExpr frameTickSpec(int edge) {
+    IExpr spec = writtenFrameTickSpec(edge);
+    return spec.isTrue() && (edge == 1 || edge == 3) ? S.None : spec;
+  }
+
+  /** The tick specification for one frame edge as it is written in the option. */
+  private IExpr writtenFrameTickSpec(int edge) {
     IExpr spec = options.frameTicks;
     if (spec.isList() && ((IAST) spec).argSize() == 2) {
       IAST outer = (IAST) spec;

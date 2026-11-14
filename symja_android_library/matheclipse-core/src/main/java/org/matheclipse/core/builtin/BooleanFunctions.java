@@ -3168,6 +3168,38 @@ public final class BooleanFunctions {
       return UNKNOWN;
     }
 
+    /**
+     * Split a chain of at least two relations at every relation which is no comparison: each such
+     * relation keeps its own <code>Inequality(a, rel, b)</code>, and the runs of comparisons between
+     * them become chains of their own, which evaluate separately.
+     *
+     * @return the conjunction of the parts, or {@link F#NIL} if every relation is a comparison
+     */
+    private static IExpr splitAtUnknownRelations(final IAST ast) {
+      int i = 2;
+      while (i < ast.size() && getCompSign(ast.get(i)) != UNKNOWN) {
+        i += 2;
+      }
+      if (i >= ast.size()) {
+        return F.NIL;
+      }
+      final IASTAppendable parts = F.ast(S.And);
+      int start = 1;
+      for (i = 2; i < ast.size(); i += 2) {
+        if (getCompSign(ast.get(i)) == UNKNOWN) {
+          if (i - 1 > start) {
+            parts.append(ast.subList(start, i));
+          }
+          parts.append(F.ternaryAST3(S.Inequality, ast.get(i - 1), ast.get(i), ast.get(i + 1)));
+          start = i + 1;
+        }
+      }
+      if (start < ast.argSize()) {
+        parts.append(ast.subList(start, ast.size()));
+      }
+      return parts.argSize() == 1 ? F.NIL : parts;
+    }
+
     @Override
     public IExpr evaluate(final IAST ast, EvalEngine engine) {
       if (ast.size() == 2) {
@@ -3189,16 +3221,14 @@ public final class BooleanFunctions {
       if ((ast.size()) % 2 != 0) {
         return F.NIL;
       }
-      int firstSign = getCompSign(ast.arg2());
-      if (firstSign == UNKNOWN) {
-        return F.NIL;
+      final IExpr split = splitAtUnknownRelations(ast);
+      if (split.isPresent()) {
+        return split;
       }
+      int firstSign = getCompSign(ast.arg2());
 
       for (int i = 4; i < ast.size(); i += 2) {
         final int thisSign = getCompSign(ast.get(i));
-        if (thisSign == UNKNOWN) {
-          return F.NIL;
-        }
         if (thisSign == -firstSign || thisSign == UNEQUAL || firstSign == UNEQUAL) {
           IASTAppendable firstIneq = F.ast(S.Inequality);
           IASTAppendable secondIneq = F.ast(S.Inequality);

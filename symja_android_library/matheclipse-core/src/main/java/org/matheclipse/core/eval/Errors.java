@@ -609,6 +609,8 @@ public class Errors {
       "The dimension parameter `1` is expected to be a positive integer or a list of positive integers.", //
       "pospoint", "`1` contains integers that are not positive.", //
       "posprm", "Parameter `1` at position `2` in `3` is expected to be positive.", //
+      "posd",
+      "The left-hand side of `1` in `2` is not a position or a pattern that will match the position of an element in an array with dimensions `3`.", //
       "posr", "The left hand side of `2` in `1` doesn't match an int-array of depth `3`.", //
       "post", "The threshold `1` should be positive.", //
       "ppnt", "The value `1` of argument `2`  must be a positive integer.", //
@@ -616,7 +618,10 @@ public class Errors {
       "Parameter `1` at position `2` in `3` is expected to be between 0 and 1 inclusive.", //
       "preal", "The parameter `1` should be real-valued.", //
       "precbd", "Requested precision `1` is not a machine-sized real number.", //
+      "preclg",
+      "Requested precision `1` is larger than $MaxPrecision. Using current $MaxPrecision of `2` instead. $MaxPrecision = Infinity specifies that any precision should be allowed.", //
       "precsm", "Requested precision `1` is smaller than `2`.", //
+      "stop", "Further output of `1` will be suppressed during this calculation.", //
       "precgt", "Requested precision `1` is greater than `2`.", //
       "prng",
       "Value of option `1` is not All, Full, Automatic, a positive machine number, or an appropriate list of range specifications.",
@@ -698,6 +703,7 @@ public class Errors {
       "shapespec", "Shape specification `1` is invalid.", //
       "slota", "Named slot `1` in `2` cannot be filled from `3`.", //
       "slotn", "Slot number `1` in `2` cannot be filled from `3`.", //
+      "slots", "SlotSequence[`1`] in `2` cannot be filled from `3`.", //
       "slwcon",
       "Numerical integration converging too slowly; suspect one of the following: singularity, "
           + "value of the integration is 0, highly oscillatory integrand, or WorkingPrecision too "

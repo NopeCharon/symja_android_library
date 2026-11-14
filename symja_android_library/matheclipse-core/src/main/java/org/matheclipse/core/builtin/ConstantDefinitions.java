@@ -109,6 +109,8 @@ public class ConstantDefinitions {
       S.$UserName.setEvaluator(new $UserName());
       S.$RecursionLimit.setEvaluator(new $RecursionLimit());
       S.$MaxExtraPrecision.setEvaluator(new $MaxExtraPrecision());
+      S.$MinPrecision.setEvaluator(new PrecisionBound(F.C0));
+      S.$MaxPrecision.setEvaluator(new PrecisionBound(F.CInfinity));
       S.$RootDirectory.setEvaluator(new $RootDirectory());
       S.$ScriptCommandLine.setEvaluator(new $ScriptCommandLine());
       S.$ScriptInputString.setEvaluator(new $ScriptInputString());
@@ -838,6 +840,25 @@ public class ConstantDefinitions {
       Errors.printMessage(S.$MaxExtraPrecision, "precset", F.list(rightHandSide), engine);
       // the value is kept, the assignment gives what was assigned
       return rightHandSide;
+    }
+  }
+
+  /**
+   * <code>$MinPrecision</code> and <code>$MaxPrecision</code>: the bounds of the precision of
+   * arbitrary-precision arithmetic results, read by {@link EvalEngine#boundedPrecision(double)}. A
+   * <code>Block</code> sets them for one evaluation.
+   */
+  private static class PrecisionBound extends AbstractSymbolEvaluator {
+    private final IExpr defaultValue;
+
+    PrecisionBound(IExpr defaultValue) {
+      this.defaultValue = defaultValue;
+    }
+
+    @Override
+    public IExpr evaluate(final ISymbol symbol, EvalEngine engine) {
+      final IExpr value = symbol.assignedValue();
+      return value != null && value.isPresent() ? value : defaultValue;
     }
   }
 
