@@ -939,6 +939,10 @@ public final class BoxNotation {
           // a function tag rebuilds the wrapper: TagBox[box, NumberForm[#1, {4, 2}]&]
           return slot(args.get(1)) + "[" + source(args.get(0)) + "]";
         }
+        if (size >= 2 && org.matheclipse.core.form.NumberFormatter.formKind(args.get(1)) != null) {
+          // a number form name as the tag: TagBox[InterpretationBox[...], NumberForm]
+          return slot(args.get(1)) + "[" + source(args.get(0)) + "]";
+        }
         if (size >= 1) {
           return source(args.get(0));
         }

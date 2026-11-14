@@ -2884,6 +2884,11 @@ public class GraphicsOptions {
         method.append(F.Rule(F.stringx(METHOD_SCALING), encodeScaling(value)));
         continue;
       }
+      if (key == S.Ticks && value.isFalse()) {
+        // no ticks on either axis, as empty tick lists
+        result.append(F.Rule(S.Ticks, F.list(F.CEmptyList, F.CEmptyList)));
+        continue;
+      }
       if (key == S.Ticks && value.isAutomatic()) {
         // one setting for each axis: a front end that reads a
         // pair and nothing else (the WLJS notebook does) left the vertical axis unlabelled

@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
  */
 public class BranchCutIntegralTest extends ExprEvaluatorTestCase {
 
+  @Tag(TestTags.SLOW)
   @Test
   public void testFourierIntegralsOfRationalFunctions() {
     // the antiderivative jumps where -2+3*I*x crosses the negative real axis
@@ -119,6 +120,7 @@ public class BranchCutIntegralTest extends ExprEvaluatorTestCase {
         "-I*Pi-ExpIntegralE(1,2)");
   }
 
+  @Tag(TestTags.SLOW)
   @Test
   public void testBranchesOfLogarithmsAndCosIntegral() {
     // merged logarithms keep their multiple of 2*Pi*I

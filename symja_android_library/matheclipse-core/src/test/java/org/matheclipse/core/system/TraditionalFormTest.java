@@ -160,4 +160,25 @@ public class TraditionalFormTest extends ExprEvaluatorTestCase {
     check("ToExpression(FormBox(RowBox({RowBox({\"(\", RowBox({\"3\", \" \", \"y\"}), \")\"}), \"mod\", \"5\"}), TraditionalForm), TraditionalForm)", //
         "15*Mod*y");
   }
+
+  /**
+   * A fraction times a sum is one fraction, unless the sum shows a fraction itself or the
+   * fraction is negative: then the fraction goes in front.
+   */
+  @Test
+  public void testFractionInFrontOfSum() {
+    check("ToBoxes(5/3*(a + b), TraditionalForm) // InputForm", //
+        "FormBox(FractionBox(RowBox({\"5\",\" \",RowBox({\"(\",RowBox({\"a\",\"+\",\"b\"}),\")\"})}),\"3\"),TraditionalForm)");
+    check("ToBoxes(5/3*(a + b/7), TraditionalForm) // InputForm", //
+        "FormBox(RowBox({FractionBox(\"5\",\"3\"),\" \",RowBox({\"(\",RowBox({\"a\",\"+\",FractionBox(\"b\",\"7\")}),\")\"})}),TraditionalForm)");
+    check("ToBoxes(2/11*(a + 1/b)^3, TraditionalForm) // InputForm", //
+        "FormBox(RowBox({FractionBox(\"2\",\"11\"),\" \",SuperscriptBox(RowBox({\"(\",RowBox({\"a\",\"+\",FractionBox(\"1\",\"b\")}),\")\"}),\"3\")}),TraditionalForm)");
+    check("ToBoxes(-2/11*(a + b)^3, TraditionalForm) // InputForm", //
+        "FormBox(RowBox({RowBox({\"-\",FractionBox(\"2\",\"11\")}),\" \",SuperscriptBox(RowBox({\"(\",RowBox({\"a\",\"+\",\"b\"}),\")\"}),\"3\")}),TraditionalForm)");
+    check("ToBoxes(5/3*a^4, TraditionalForm) // InputForm", //
+        "FormBox(FractionBox(RowBox({\"5\",\" \",SuperscriptBox(\"a\",\"4\")}),\"3\"),TraditionalForm)");
+    // in StandardForm the product stays one fraction
+    check("ToBoxes(5/3*(a + b/7)) // InputForm", //
+        "FractionBox(RowBox({\"5\",\" \",RowBox({\"(\",RowBox({\"a\",\"+\",FractionBox(\"b\",\"7\")}),\")\"})}),\"3\")");
+  }
 }

@@ -9494,7 +9494,8 @@ public final class ListFunctions {
         level = new TotalLevelSpecification(tf, 1, false);
       }
 
-      IExpr arg1 = ast.arg1();
+      // a QuantityArray is totalled as the array of quantities it stands for
+      IExpr arg1 = QuantityFunctions.normalizeQuantityArray(ast.arg1());
       if (isPlainAtom(arg1)) {
         // the total of an atom is the atom
         return arg1;

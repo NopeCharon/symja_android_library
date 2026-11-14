@@ -17658,15 +17658,16 @@ public class LowercaseTestCase extends ExprEvaluatorTestCase {
     check("ToString(TraditionalForm(y^3))", //
         "\\!\\(\\*FormBox[SuperscriptBox[\"y\", \"3\"], TraditionalForm]\\)");
     check("ToString(TraditionalForm(NumberForm(3.14159265, {5, 3})))", //
-        "\\!\\(\\*FormBox[TagBox[InterpretationBox[\"3.142\", 3.14159265`], "
+        "\\!\\(\\*FormBox[TagBox[InterpretationBox[StyleBox[\"\\\"3.142\\\"\", "
+            + "Rule[ShowStringCharacters, False]], 3.14159265`, Rule[AutoDelete, True]], "
             + "Function[NumberForm[Slot[1], {5, 3}]]], TraditionalForm]\\)");
     // the box escape reads back as the wrapper
     check("FullForm(ToExpression(ToString(TraditionalForm(NumberForm(3.14159265, {5, 3})))))", //
         "NumberForm(3.14159265`, List(5, 3))");
     check("FullForm(ToExpression(ToString(NumberForm(4.5*^9, {3, 1}), StandardForm)))", //
         "NumberForm(4.5`*^9, List(3, 1))");
-    check("ToBoxes(NumberForm(4.5*^9, {3, 1}))[[1, 1]]", //
-        "RowBox({4.5,×,SuperscriptBox(10,9)})");
+    check("ToBoxes(NumberForm(4.5*^9, {3, 1}))[[1, 1, 1]]", //
+        "RowBox({\"4.5\",×,SuperscriptBox(10,\"9\")})");
   }
 
   @Test

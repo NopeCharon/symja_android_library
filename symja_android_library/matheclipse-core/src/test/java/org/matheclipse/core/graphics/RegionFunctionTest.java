@@ -56,6 +56,13 @@ public class RegionFunctionTest {
     return value;
   }
 
+  /** The least and the greatest squared distance from the origin of a point of a polygon. */
+  private static String shadedRadii(String plot) {
+    return "With({g = " + plot + "}, MinMax(Map(#.# &, "
+        + "First(Cases(g, GraphicsComplex(q_, ___) :> q, Infinity))"
+        + "[[Union(Flatten(Cases(g, Polygon(l_) :> l, Infinity)))]])))";
+  }
+
   /** How many separate polylines the graphic carries. */
   private static int lines(String plot) {
     return count("Length(Cases(" + plot + ",_Line,Infinity))");
@@ -199,8 +206,14 @@ public class RegionFunctionTest {
   public void anAnnulusIsHollow() {
     String base = "ContourPlot(x^2-y^2,{x,-3,3},{y,-3,3},PlotPoints->20";
     String annulus = base + ",RegionFunction->Function({x,y,z},2<x^2+y^2<9))";
-    assertTrue(polygonPoints(annulus) < polygonPoints(base + ")"),
-        "the disc in the middle and the corners outside are not drawn");
+    // the squared radii of the shaded points: the whole square without the region, the annulus
+    // up to the clipping along its circles with it
+    IExpr square = evaluator.eval(shadedRadii(base + ")"));
+    IExpr ring = evaluator.eval(shadedRadii(annulus));
+    assertTrue(square.first().evalf() < 0.5 && square.second().evalf() > 17.0,
+        "without the region the corners and the middle are drawn, got " + square);
+    assertTrue(ring.first().evalf() > 1.9 && ring.second().evalf() < 9.1,
+        "the disc in the middle and the corners outside are not drawn, got " + ring);
     // a point in the hole is not covered by any polygon
     IExpr covered = evaluator.eval(
         "MemberQ(Cases(Normal(" + annulus

@@ -36,6 +36,11 @@ public final class GraphicsOptions2D {
   public double[] imageSize = {360, 360};
   public boolean imageSizeSet = false;
   public boolean imageSizeHeightSet = false;
+  /**
+   * Whether the {@code ImageSize} rule gives a width. <code>ImageSize -&gt; {Automatic, h}</code>
+   * gives the height alone, the width then follows from the aspect ratio.
+   */
+  public boolean imageSizeWidthSet = false;
   /** {@code ImageSize -> All}: leave room for the largest item, shown or not. */
   public boolean imageSizeAll = false;
   /**
@@ -492,6 +497,24 @@ public final class GraphicsOptions2D {
     }
   }
 
+  /**
+   * Whether the value of <code>Ticks</code> draws no ticks at all: <code>None</code>,
+   * <code>False</code>, <code>{}</code>, or a pair of those, as <code>{{}, {}}</code>, to which
+   * the plot functions normalize <code>Ticks -&gt; False</code>.
+   */
+  public static boolean ticksOff(IExpr ticks) {
+    if (ticks.isNone() || ticks.isFalse() || ticks.isEmptyList()) {
+      return true;
+    }
+    if (ticks.isList() && ((IAST) ticks).argSize() == 2) {
+      IExpr x = ticks.first();
+      IExpr y = ticks.second();
+      return (x.isNone() || x.isFalse() || x.isEmptyList())
+          && (y.isNone() || y.isFalse() || y.isEmptyList());
+    }
+    return false;
+  }
+
   private void applyImageSize(IExpr value) {
     imageSizeSet = true;
     imageSizeExplicit = true;
@@ -512,6 +535,7 @@ public final class GraphicsOptions2D {
           Double.NaN);
       if (!Double.isNaN(w) && w > 0) {
         imageSize[0] = w;
+        imageSizeWidthSet = true;
       }
       if (!Double.isNaN(h) && h > 0) {
         imageSize[1] = h;
@@ -528,6 +552,7 @@ public final class GraphicsOptions2D {
     double s = namedImageSize(value, Double.NaN);
     if (!Double.isNaN(s) && s > 0) {
       imageSize[0] = s;
+      imageSizeWidthSet = true;
     }
   }
 

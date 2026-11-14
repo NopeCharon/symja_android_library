@@ -855,6 +855,39 @@ public class GraphFunctions {
   }
 
   /**
+   * The graph of a list <code>{{edge1, label1}, edge2, ...}</code> of edges given as first
+   * argument of a plot call: its edges, with their labels unless the call has the option
+   * <code>EdgeLabeling -&gt; False</code>.
+   *
+   * @return <code>arg</code> itself if it is no such list
+   */
+  public static IExpr labelledEdgesGraph(IExpr arg, IAST call, EvalEngine engine) {
+    IAST labelled = labelledEdges(arg);
+    if (labelled.isNIL()) {
+      return arg;
+    }
+    return engine.evaluate(edgeLabeling(call)
+        ? F.binaryAST2(S.Graph, labelled.first(), F.Rule(S.EdgeLabels, labelled.second()))
+        : F.unaryAST1(S.Graph, labelled.first()));
+  }
+
+  /** Whether a plot call draws edge labels: not with the option <code>EdgeLabeling -&gt; False</code>. */
+  private static boolean edgeLabeling(IAST call) {
+    for (int i = 2; i < call.size(); i++) {
+      if (isEdgeLabelingOption(call.get(i))) {
+        return !call.get(i).second().isFalse();
+      }
+    }
+    return true;
+  }
+
+  /** Whether <code>option</code> is a rule for the legacy option <code>EdgeLabeling</code>. */
+  public static boolean isEdgeLabelingOption(IExpr option) {
+    return option.isRuleAST() && option.first().isSymbol()
+        && ((ISymbol) option.first()).getSymbolName().equalsIgnoreCase("EdgeLabeling");
+  }
+
+  /**
    * The edges and the rules <code>edge -> label</code> of a list
    * <code>{{edge1, label1}, edge2, ...}</code> of edges, at least one of them with a label.
    *

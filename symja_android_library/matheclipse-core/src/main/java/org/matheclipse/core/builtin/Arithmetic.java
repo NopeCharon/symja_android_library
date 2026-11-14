@@ -3446,7 +3446,15 @@ public final class Arithmetic {
           }
         }
         if (ast.exists(x -> x instanceof IDataExpr || x.isQuantity() || AroundFunctions.isAround(x)
-            || AroundFunctions.isVectorAround(x) || AlgebraicNumberField.isObject(x))) {
+            || AroundFunctions.isVectorAround(x) || AlgebraicNumberField.isObject(x)
+            || x.isAST(S.QuantityArray, 3))) {
+          if (ast.exists(x -> x.isAST(S.QuantityArray, 3))) {
+            // arrays of quantities add element-wise
+            IExpr quantityArrayResult = QuantityFunctions.quantityArrayArithmetic(ast, engine);
+            if (quantityArrayResult.isPresent()) {
+              return quantityArrayResult;
+            }
+          }
           if (ast.exists(AlgebraicNumberField::isObject)) {
             // objects of one number field add in that field
             IExpr algebraicResult = AlgebraicNumberField.plus(ast, engine);
@@ -8124,6 +8132,14 @@ public final class Arithmetic {
         }
       }
 
+      if (arg1.isAST(S.QuantityArray, 3) || arg2.isAST(S.QuantityArray, 3)) {
+        // an array of quantities multiplies element-wise
+        IExpr quantityArrayResult =
+            QuantityFunctions.quantityArrayArithmetic(F.Times(arg1, arg2), EvalEngine.get());
+        if (quantityArrayResult.isPresent()) {
+          return quantityArrayResult;
+        }
+      }
       // Quantities: a non-quantity factor is absorbed into the magnitude
       if (arg1.isQuantity()) {
         if (arg2.isQuantity()) {
